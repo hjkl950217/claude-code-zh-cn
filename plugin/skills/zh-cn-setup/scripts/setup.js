@@ -79,12 +79,35 @@ function ccSwitchDbPath() {
   return path.join(homeDir(), ".cc-switch", "cc-switch.db");
 }
 
+function nodeSqlite() {
+  try {
+    return require("node:sqlite").DatabaseSync;
+  } catch {
+    return null;
+  }
+}
+
 function sqlite3Available() {
+  if (nodeSqlite()) return true;
   const result = spawnSync("sqlite3", ["--version"], { encoding: "utf8", windowsHide: true });
   return result.status === 0;
 }
 
 function ccSwitchReadCommonConfig(dbFile) {
+  const DatabaseSync = nodeSqlite();
+  if (DatabaseSync) {
+    try {
+      const db = new DatabaseSync(dbFile, { readOnly: true });
+      try {
+        const row = db.prepare("select value from settings where key='common_config_claude'").get();
+        return row ? String(row.value || "") : "";
+      } finally {
+        db.close();
+      }
+    } catch {
+      return null;
+    }
+  }
   const result = spawnSync("sqlite3", [dbFile, "select value from settings where key='common_config_claude';"], {
     encoding: "utf8",
     windowsHide: true,
@@ -135,7 +158,30 @@ function syncCcSwitch(dbFile, overlay) {
   }
 
   const mergedJson = JSON.stringify(overlay, null, 2);
-  // 用 hex 绑定参数避免引号转义地狱：把合并后的 JSON 写到临时文件，用 readfile() 读入
+  const DatabaseSync = nodeSqlite();
+  if (DatabaseSync) {
+    try {
+      const db = new DatabaseSync(dbFile);
+      try {
+        db.exec("begin immediate");
+        db.prepare("insert or replace into settings(key,value) values(?, ?)")
+          .run("common_config_claude", mergedJson);
+        db.prepare("delete from settings where key=?")
+          .run("common_config_claude_cleared");
+        db.exec("commit");
+        return { ok: true, backup };
+      } catch (error) {
+        try { db.exec("rollback"); } catch {}
+        return { ok: false, reason: error.message || "写入失败", backup };
+      } finally {
+        db.close();
+      }
+    } catch (error) {
+      return { ok: false, reason: error.message || "无法打开数据库", backup };
+    }
+  }
+
+  // sqlite3 CLI 兼容路径：把合并后的 JSON 写到临时文件，用 readfile() 读入
   const mergedFile = path.join(os.tmpdir(), `cczh-ccswitch-merged-${process.pid}.json`);
   try {
     fs.writeFileSync(mergedFile, mergedJson);
@@ -175,6 +221,55 @@ function reportPatchStatus(pluginRoot) {
   }
   lines.push("");
   lines.push("如界面仍为英文，请完全退出所有 Claude Code 窗口后重新打开（让 hook 重新 patch）。");
+  return lines.join("\n");
+}
+
+function reportSkillTranslation(pluginRoot) {
+  const root = path.join(homeDir(), ".claude");
+  const script = path.join(pluginRoot, "skill-i18n", "translate-skills.sh");
+  const extraRoots = process.env.ZH_CN_SKILL_I18N_EXTRA_ROOTS || "";
+  const lines = ["--- Skill 描述汉化 ---"];
+  if (!fs.existsSync(script)) {
+    lines.push("! 当前插件包缺少 skill-i18n 入口，已跳过。");
+    return lines.join("\n");
+  }
+  lines.push("Skill 描述同时用于界面显示和自动触发，因此不会在未授权时静默改写。");
+  if (extraRoots) lines.push(`额外扫描根：${extraRoots}`);
+  lines.push("先只读扫描：");
+  lines.push(`  bash "${script}" --root "${root}" --dry-run`);
+  lines.push("确认后立即翻译：");
+  lines.push(`  bash "${script}" --root "${root}"`);
+  lines.push("如 skill 由 CC Switch 管理且不在 ~/.claude 下，请先设置 ZH_CN_SKILL_I18N_EXTRA_ROOTS 为其真实目录。");
+  lines.push("翻译后可在 Claude Code 中运行 /reload-plugins；若仍未刷新，请完全退出后重开。");
+  return lines.join("\n");
+}
+
+function reportCcSwitchSkillDescriptions(pluginRoot) {
+  const dbFile = ccSwitchDbPath();
+  const lines = ["--- CC Switch skill 描述汉化 ---"];
+  if (!fs.existsSync(dbFile)) {
+    lines.push("未检测到 CC Switch 数据库，已跳过。");
+    return lines.join("\n");
+  }
+  let plan;
+  try {
+    const { buildSyncPlan } = require("./cc-switch-descriptions.js");
+    plan = buildSyncPlan(dbFile, path.join(path.dirname(dbFile), "skills"));
+  } catch (error) {
+    lines.push(`! 无法读取 CC Switch 数据库：${error.message}`);
+    lines.push("  如需汉化 skill 描述，可在终端手动运行 cc-switch-descriptions.js。");
+    return lines.join("\n");
+  }
+  if (plan.missingDb || plan.update.length === 0) {
+    lines.push("skill 描述已全部为中文，无需同步。");
+    return lines.join("\n");
+  }
+  lines.push(`检测到 ${plan.update.length} 条 skill 描述仍为英文（${plan.update.map((r) => r.name).join("、")}），对应 SKILL.md 已翻译为中文。`);
+  lines.push("写 CC Switch 数据库属于高风险操作，需要你主动授权运行：");
+  const script = path.join(pluginRoot, "skills", "zh-cn-setup", "scripts", "cc-switch-descriptions.js");
+  lines.push(`  先只读预览：node "${script}"`);
+  lines.push(`  确认后写入（会先备份数据库）：node "${script}" --apply`);
+  lines.push("  还原：用 --apply 输出的备份文件覆盖 cc-switch.db（需先退出 CC Switch 与 Claude Code）");
   return lines.join("\n");
 }
 
@@ -248,6 +343,8 @@ function main() {
   // 3. patch 状态
   console.log("\n--- CLI patch 状态 ---");
   console.log(reportPatchStatus(pluginRoot));
+  console.log(`\n${reportSkillTranslation(pluginRoot)}`);
+  console.log(`\n${reportCcSwitchSkillDescriptions(pluginRoot)}`);
 
   console.log("\n增强安装完成。");
 }
@@ -266,6 +363,8 @@ module.exports = {
   fillMissingKeys,
   ccSwitchConfigStatus,
   syncCcSwitch,
+  reportSkillTranslation,
+  reportCcSwitchSkillDescriptions,
   settingsFile,
   ccSwitchDbPath,
 };

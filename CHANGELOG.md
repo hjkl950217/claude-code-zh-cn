@@ -6,6 +6,26 @@
 - **次版本号**：新增功能或显著改进（比如新增 patch、新增翻译）
 - **修订号**：Bug 修复和小调整（比如修正一条翻译）
 
+## [2.11.0] - 2026-08-06
+
+### 新增
+
+- 增强 `zh-cn-setup` skill 作为统一覆盖检查入口，检查 Marketplace 插件安装后的 settings、CLI patch、CC Switch 和 skill 描述覆盖，并为必须在 Claude Code 进程外执行的步骤输出终端命令。
+- 新增可选工具 `cc-switch-descriptions.js`：把 CC Switch 数据库 `skills` 表中仍为英文、但对应 `SKILL.md` 已翻译为中文的描述同步为中文；默认只读预览，`--apply` 才写入并先备份数据库，支持一键还原。
+- skill-i18n 支持 `ZH_CN_SKILL_I18N_EXTRA_ROOTS`，可显式扫描 CC Switch 等管理器存放在 `~/.claude` 外的 skill；扫描、写回和恢复共享同一组路径边界。
+- Node 支持 `node:sqlite` 时可直接读写 CC Switch 数据库，不再强制依赖系统 `sqlite3` CLI。
+
+### 改进
+
+- 状态行补齐 `Thought`、`Crunched`、`Brewed`、运行中 shell 数量和展开提示，并允许上游调整状态动词数组顺序；后台 shell 摘要（`1 个 shell` / `N 个 shell`）与 `· ${n} 仍在运行` 适配原生 2.1.221 的模板结构，不再依赖旧的 `shell still running` 字面量。
+- 补齐 `Session recap`、`Generating recap`、`Recapping conversation` 等 recap 状态文案，并本地化会话回顾标题 `recap:` 与模型切换行为的 `/config` 提示。
+- 补齐 `/config` 命令列表与 `/help` 中 16 条高频内置命令描述（`config`、`cd`、`usage`、`session`、`review`、`fork`、`subtask` 等），命令名与 `/code-review` 等标识保持英文。
+- 保留 skill 描述翻译的显式授权边界：默认不消耗额度、不改写文件，先提供 dry-run，再提供翻译与恢复命令。
+
+### 验证
+
+- 新增状态词族、recap（含标题）、后台 shell 摘要、额外 skill 根目录、进程外命令、`/config` 内置命令描述和 CC Switch skill 描述同步回归测试。
+
 ## [2.10.1] - 2026-08-05
 
 ### 修复

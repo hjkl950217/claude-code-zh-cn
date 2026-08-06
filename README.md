@@ -142,13 +142,19 @@ claude plugin install claude-code-zh-cn@claude-code-zh-cn --scope user
 
 装好后**重启一次 Claude Code**：session-start hook 会自动把 spinner 动词/提示/界面中文化配置合并进 `settings.json`，并自动 patch 已验证版本的 CLI 硬编码文字。
 
-> **spinner/界面已是英文？** 如果重启后 spinner 仍是英文，运行增强安装 skill 补齐配置：在 Claude Code 里说「帮我运行 zh-cn-setup」或手动执行：
+> **完整覆盖检查**：安装后可直接运行 `zh-cn-setup` skill（在 Claude Code 里说「帮我运行 zh-cn-setup」）。它会补齐安全的 settings 配置、报告 CLI patch 与 CC Switch 状态，并为 skill 描述等不能在当前进程内安全完成的操作给出可复制的终端命令。
+>
+> **spinner/界面仍是英文？** 如果重启后 spinner 仍是英文，也可运行增强安装 skill：在 Claude Code 里说「帮我运行 zh-cn-setup」或手动执行：
 >
 > ```bash
 > node "${CLAUDE_PLUGIN_ROOT}/skills/zh-cn-setup/scripts/setup.js"
 > ```
 >
-> 该脚本会从插件内置数据补齐缺失的 spinner 配置、检测并同步 CC Switch 通用配置（需授权）、报告 patch 状态。**只补齐缺失项，绝不覆盖你已有的手动配置。**
+> 该脚本会从插件内置数据补齐缺失的 spinner 配置、检测并同步 CC Switch 通用配置（需授权）、报告 patch 状态，并输出 skill 描述汉化命令。**只补齐缺失项，绝不覆盖你已有的手动配置。**
+>
+> Skill 描述默认不自动改写：同一个 `description` 既显示在菜单里，也用于 model 判断是否触发 skill。先运行脚本输出的 `--dry-run` 命令检查范围，再执行翻译命令。CC Switch 管理的 skill 若不在 `~/.claude` 下，请把其真实目录通过 `ZH_CN_SKILL_I18N_EXTRA_ROOTS` 传入；Windows 多个目录用分号分隔，macOS/Linux 用冒号分隔。译文会保留英文备份，可用 `node "${CLAUDE_PLUGIN_ROOT}/skill-i18n/restore.js" --all` 还原。
+>
+> **CC Switch 数据库里的 skill 描述仍是英文？** `ZH_CN_SKILL_I18N_EXTRA_ROOTS` 只翻译 `SKILL.md` 文件本体，不会写 CC Switch 的 `~/.cc-switch/cc-switch.db`。检测到 `skills` 表中描述仍为英文、但对应 `SKILL.md` 已翻译为中文时，`zh-cn-setup` skill 会提示运行可选工具 `cc-switch-descriptions.js`：默认只读预览，`--apply` 才写入（自动备份数据库并输出还原命令）：`node "${CLAUDE_PLUGIN_ROOT}/skills/zh-cn-setup/scripts/cc-switch-descriptions.js"`。CC Switch 管理界面、Claude Code `/skills` 面板与 model 自动触发共用同一份 `description`，请先预览再决定。
 
 > **Windows native .exe 用户**：如果当前 Claude Code 是 2.1.113+ native `.exe`，patch 需要先 `npm install -g node-lief`。未安装时 Layer 4 CLI Patch 会跳过（spinner/界面中文化等 Layer 1~3 不受影响）。
 
@@ -177,7 +183,7 @@ cd claude-code-zh-cn
 - ✅ 合并中文设置到 settings.json
 - ✅ 检测到 CC Switch 通用配置缺少中文设置时，先询问用户；同意后才同步
 - ✅ 优先通过 Claude Code 插件管理器登记 marketplace 并启用正式插件；注册不可用时才安装独立备用 Hook
-- ✅ 已验证版本直接使用公开证据；更高 native 版本也先本机自检。可 patch 硬编码文字（2007 条翻译；代表版本 `2.1.112` 实测 1655 处有效 patch）
+- ✅ 已验证版本直接使用公开证据；更高 native 版本也先本机自检。可 patch 硬编码文字（2036 条翻译；代表版本 `2.1.112` 实测 1655 处有效 patch）
 - ✅ 缺少 `node-lief`、native 格式变化、提取失败或自检失败时，只跳过 Layer 4；Layer 1~3 和 Claude Code 本体继续可用
 
 ### Windows 原生安装（完整脚本）
@@ -298,7 +304,7 @@ Claude Code 更新后，npm / macOS native 安装会在首次会话启动时**�
 | 中文上下文注入 | - | SessionStart Hook |
 | 通知翻译 | 6 条 | Notification Hook |
 | 输出风格 | - | Chinese Output Style |
-| UI 文字中文化 | 2007 条翻译，`2.1.112` 实测 1655 处有效 patch | CLI Patch（扫描真实双引号字符串 token 后逐条替换）+ 显示面审计 |
+| UI 文字中文化 | 2036 条翻译，`2.1.112` 实测 1655 处有效 patch | CLI Patch（扫描真实双引号字符串 token 后逐条替换）+ 显示面审计 |
 | 自动重 patch | - | 版本检测，更新后首次会话重新 patch |
 | 插件自动更新 | - | 正式安装态交给 Claude Code 插件管理器；独立兜底态只跟随已发布 Release |
 
@@ -459,7 +465,7 @@ Windows：现已支持通过 `install.ps1` 在 PowerShell 5.1+ 中原生安装�
 
 ## English
 
-**claude-code-zh-cn** is a Simplified Chinese localization plugin for [Claude Code CLI](https://github.com/anthropics/claude-code). It translates 187 spinner verbs, 41 spinner tips, 2007 UI translations, notification messages, and more. On unverified CLI versions, unmatched strings stay in English, and failed patches restore or preserve the original CLI. Verified version windows are documented in [docs/support-matrix.md](./docs/support-matrix.md).
+**claude-code-zh-cn** is a Simplified Chinese localization plugin for [Claude Code CLI](https://github.com/anthropics/claude-code). It translates 187 spinner verbs, 41 spinner tips, 2036 UI translations, notification messages, and more. On unverified CLI versions, unmatched strings stay in English, and failed patches restore or preserve the original CLI. Verified version windows are documented in [docs/support-matrix.md](./docs/support-matrix.md).
 
 ```bash
 curl -fsSL https://github.com/taekchef/claude-code-zh-cn/releases/latest/download/install-remote.sh | bash

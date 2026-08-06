@@ -747,9 +747,33 @@ function translateFastModeTemplateLiteral(literal) {
 }
 
 function applyDynamicLiteralTranslations(text) {
-    return text.replace(/Toggle fast mode \((Opus [^)]+?)( only)?\)/g, (_match, model, only) => {
+    const statusVerbs = new Map([
+        ["Baked", "烘焙了"],
+        ["Brewed", "沏了"],
+        ["Churned", "翻搅了"],
+        ["Cogitated", "琢磨了"],
+        ["Cooked", "烹饪了"],
+        ["Crunched", "嚼了"],
+        ["Sautéed", "翻炒了"],
+        ["Saut\\xE9ed", "翻炒了"],
+        ["Thought", "思考了"],
+        ["Worked", "忙活了"],
+    ]);
+
+    let translated = text.replace(/Toggle fast mode \((Opus [^)]+?)( only)?\)/g, (_match, model, only) => {
         return only ? `切换快速模式（仅 ${model}）` : `切换快速模式（${model}）`;
     });
+    translated = translated.replace(
+        /\b(Baked|Brewed|Churned|Cogitated|Cooked|Crunched|Sautéed|Saut\\xE9ed|Thought|Worked) for (?=\$\{)/g,
+        (_match, verb) => `${statusVerbs.get(verb)} `
+    );
+    translated = translated
+        .replace(/ctrl\+o to expand/g, "按 ctrl+o 展开")
+        .replace(/(\$\{[^}]+\}|\d+) shell(s)? still running/g, "$1 个 shell 仍在运行")
+        .replace(/Session recap/g, "会话回顾")
+        .replace(/Generating recap/g, "正在生成会话回顾")
+        .replace(/Recapping conversation/g, "正在回顾会话");
+    return translated;
 }
 
 function shouldSkipTranslationRule(rule) {
@@ -918,6 +942,16 @@ function installWorkflowLifecycleResidueLocalization() {
     );
 }
 
+function installTurnDurationBackgroundLocalization() {
+    // 状态短语 ` · ${summary} still running`：summary 已由翻译表中文化（1 个 shell / N 个 shell），
+    // 这里只把模板里紧跟插值后的 still running 中文化。
+    // 只匹配 `\xB7 ${...} still running` 这个唯一结构，不碰 MCP/tool 的 `'${o}' still running`。
+    tryRegexReplace(
+        /(\\xB7 \$\{[^}]+\}) still running/g,
+        (_match, prefix) => `${prefix} 仍在运行`
+    );
+}
+
 // === 特殊 patch（基于精确代码模式匹配，安全）===
 // 这些 patch 匹配非常特定的代码模式，不会误伤标识符
 
@@ -932,6 +966,7 @@ for (const step of [
     installEffortAndWorkflowFooterLocalization,
     installCommonVisibleResidueLocalization,
     installWorkflowLifecycleResidueLocalization,
+    installTurnDurationBackgroundLocalization,
 ]) {
     try {
         step();
@@ -940,10 +975,24 @@ for (const step of [
     }
 }
 
-// 1. 过去式动词数组
+// 1. 过去式状态动词数组（兼容包含 Thought 的新版词族）
 tryRegexReplace(
     /\["Baked","Brewed","Churned","Cogitated","Cooked","Crunched","Saut(?:\u00e9|\\u00e9|\\xE9)ed","Worked"\]/g,
     () => '["烘焙了","沏了","翻搅了","琢磨了","烹饪了","嚼了","翻炒了","忙活了"]'
+);
+tryRegexReplace(
+    /\[((?:"(?:Baked|Brewed|Churned|Cogitated|Cooked|Crunched|Saut(?:é|\\u00e9|\\xE9)ed|Thought|Worked)"[,]?){2,})\]/g,
+    (match) => {
+        const pairs = [
+            ["Baked", "烘焙了"], ["Brewed", "沏了"], ["Churned", "翻搅了"],
+            ["Cogitated", "琢磨了"], ["Cooked", "烹饪了"], ["Crunched", "嚼了"],
+            ["Sautéed", "翻炒了"], ["Saut\\u00e9ed", "翻炒了"], ["Saut\\xE9ed", "翻炒了"],
+            ["Thought", "思考了"], ["Worked", "忙活了"],
+        ];
+        let result = match;
+        for (const [en, zh] of pairs) result = result.split(`"${en}"`).join(`"${zh}"`);
+        return result;
+    }
 );
 
 // 2. Tip: → 💡

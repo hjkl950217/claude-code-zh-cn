@@ -10,6 +10,7 @@ const setupScript = path.join(repoRoot, "plugin", "skills", "zh-cn-setup", "scri
 const {
   ccSwitchConfigStatus,
   fillMissingKeys,
+  reportSkillTranslation,
 } = require(setupScript);
 
 function makeTmpHome() {
@@ -97,6 +98,14 @@ test("setup.js migrates legacy spinnerVerbs arrays without losing user values", 
   assert.equal(result.language, "Chinese"); // 缺失项仍补齐
 
   fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test("setup.js reports safe out-of-process skill translation commands", () => {
+  const output = reportSkillTranslation(path.join(repoRoot, "plugin"));
+  assert.match(output, /--dry-run/);
+  assert.match(output, /translate-skills\.sh/);
+  assert.match(output, /ZH_CN_SKILL_I18N_EXTRA_ROOTS/);
+  assert.match(output, /\/reload-plugins/);
 });
 
 test("ccSwitchConfigStatus returns ok for complete config", () => {
