@@ -952,6 +952,198 @@ function installTurnDurationBackgroundLocalization() {
     );
 }
 
+function installStatusbarToolActivityLocalization() {
+    // Thought 状态栏（进行中 Thinking / 完成 Thought）
+    tryRegexReplace(/([A-Za-z0-9_$]+)\?"Thinking":"Thought"/g, (_m, v) => `${v}?"思考中":"思考"`);
+    // Thought/思考时长拼接（children:[Oe," for ",ge]},"thought"）
+    tryRegexReplace(
+        /children:\[([A-Za-z0-9_$]+)," for ",([A-Za-z0-9_$]+)\]},"thought"/g,
+        (_m, label, dur) => `children:[${label},"（",${dur},"）"]},"thought"`
+    );
+
+    // mem-search 状态栏（ye() 第三参数是固定复数 "memories"，需整体替换，先于动词对执行）
+    tryRegexReplace(
+        /ye\("mem-search",([A-Za-z0-9_$]+)\?"searching":"searched","memories"\)/g,
+        (_m, v) => `ye("mem-search",${v}?"正在搜索":"已搜索","条记忆")`
+    );
+
+    // ye() 状态栏动词对（先长后短，短词不会命中长词的子串）
+    const yeVerbs = [
+        ["searching for", "searched for", "正在搜索", "已搜索"],
+        ["editing", "edited", "正在编辑", "已编辑"],
+        ["publishing", "published", "正在发布", "已发布"],
+        ["recalling", "recalled", "正在回忆", "已回忆"],
+        ["searching", "searched", "正在搜索", "已搜索"],
+        ["listing", "listed", "正在列出", "已列出"],
+        ["running", "ran", "正在运行", "已运行"],
+        ["calling", "called", "正在调用", "已调用"],
+        ["writing", "wrote", "正在写入", "已写入"],
+        ["making", "made", "正在创建", "已创建"],
+        ["reading", "read", "正在读取", "已读取"],
+    ];
+    for (const [present, past, zhPresent, zhPast] of yeVerbs) {
+        tryRegexReplace(
+            new RegExp(`([A-Za-z0-9_$]+)\\?"${present}":"${past}"`, "g"),
+            (_m, v) => `${v}?"${zhPresent}":"${zhPast}"`
+        );
+    }
+    tryRegexReplace(/([A-Za-z0-9_$]+)\?"REPL'ing":"REPL'd"/g, (_m, v) => `${v}?"正在REPL":"已REPL"`);
+
+    // tool activity 摘要动词（xWo / team / 展开版共用 VAR===0 结构）
+    const activityVerbs = [
+        ["Searching for", "searching for", "Searched for", "searched for", "正在搜索", "已搜索"],
+        ["Recalling", "recalling", "Recalled", "recalled", "正在回忆", "已回忆"],
+        ["Searching", "searching", "Searched", "searched", "正在搜索", "已搜索"],
+        ["Writing", "writing", "Wrote", "wrote", "正在写入", "已写入"],
+        ["Reading", "reading", "Read", "read", "正在读取", "已读取"],
+        ["Listing", "listing", "Listed", "listed", "正在列出", "已列出"],
+    ];
+    for (const [present, lower, past, pastLower, zhPresent, zhPast] of activityVerbs) {
+        tryRegexReplace(
+            new RegExp(
+                `([A-Za-z0-9_$]+)===0\\?"${present}":"${lower}":\\1===0\\?"${past}":"${pastLower}"`,
+                "g"
+            ),
+            (_m, v) => `${v}===0?"${zhPresent}":"${zhPresent}":${v}===0?"${zhPast}":"${zhPast}"`
+        );
+    }
+    // 相关记忆列表（read→正在回忆/已回忆，write→正在记住/已记住）
+    tryRegexReplace(
+        /([A-Za-z0-9_$]+)\?"Recalling":"Recalled":\1\?"Remembering":"Remembered"/g,
+        (_m, v) => `${v}?"正在回忆":"已回忆":${v}?"正在记住":"已记住"`
+    );
+
+    // 状态栏数量名词（children: X})}," ",X===1?"单数":"复数"）
+    const statusNouns = [
+        ["file", "files", "个文件"],
+        ["pattern", "patterns", "个匹配"],
+        ["memory", "memories", "条记忆"],
+        ["tool", "tools", "个工具"],
+        ["agent", "agents", "个 Agent"],
+        ["time", "times", "次"],
+        ["directory", "directories", "个目录"],
+    ];
+    for (const [singular, plural, zh] of statusNouns) {
+        tryRegexReplace(
+            new RegExp(`children:([A-Za-z0-9_$]+)\\)\\}," ",\\1===1\\?"${singular}":"${plural}"`, "g"),
+            (_m, v) => `children:${v})}," ",${v}===1?"${zh}":"${zh}"`
+        );
+    }
+    // 通用数量名词（覆盖 children 数组结构、模板、属性访问等，如 uncommitted/occurrences 残留）
+    const pluralNouns = [
+        ["file", "files", "个文件"],
+        ["pattern", "patterns", "个匹配"],
+        ["memory", "memories", "条记忆"],
+        ["tool", "tools", "个工具"],
+        ["agent", "agents", "个 Agent"],
+        ["time", "times", "次"],
+        ["directory", "directories", "个目录"],
+    ];
+    for (const [singular, plural, zh] of pluralNouns) {
+        tryRegexReplace(
+            new RegExp(`([A-Za-z0-9_$]+(?:\\.[A-Za-z0-9_$]+)?)===1\\?"${singular}":"${plural}"`, "g"),
+            (_m, v) => `${v}===1?"${zh}":"${zh}"`
+        );
+    }
+    // scratchpad / bash / team 记忆（" X"," " 分隔的特殊结构）
+    tryRegexReplace(/" scratchpad"," ",([A-Za-z0-9_$]+)===1\?"edit":"edits"/g, () => '" 个 scratchpad 修改"');
+    tryRegexReplace(/" shell"," ",([A-Za-z0-9_$]+)===1\?"command":"commands"/g, () => '" 个 shell 命令"');
+    tryRegexReplace(/" team"," ",([A-Za-z0-9_$]+)===1\?"memory":"memories"/g, () => '" 条团队记忆"');
+
+    // tool activity 摘要内的数量名词（`${verb} ${count} ${count===1?"file":"files"}`）
+    const activityNouns = [
+        ["file", "files", "个文件"],
+        ["pattern", "patterns", "个匹配"],
+        ["memory", "memories", "条记忆"],
+        ["time", "times", "次"],
+        ["directory", "directories", "个目录"],
+    ];
+    for (const [singular, plural, zh] of activityNouns) {
+        tryRegexReplace(
+            new RegExp(
+                `\\$\\{([A-Za-z0-9_$]+)\\}\\s+\\$\\{([A-Za-z0-9_$]+)===1\\?"${singular}":"${plural}"\\}`,
+                "g"
+            ),
+            (_m, count) => `\${${count}} ${zh}`
+        );
+    }
+    // team 记忆（mem-search 固定复数，模板 `${X} team memories`）
+    tryRegexReplace(/\$\{([A-Za-z0-9_$]+)\} team memories\`/g, (_m, verb) => `\${${verb}} 条团队记忆\``);
+    // team 记忆（mem-read 有数量，`team ${X===1?"memory":"memories"}`）
+    tryRegexReplace(/team \$\{([A-Za-z0-9_$]+)===1\?"memory":"memories"\}/g, () => "条团队记忆");
+
+    // git / PR 动词对象
+    tryReplace(
+        'let Oe={committed:"committed",amended:"amended commit","cherry-picked":"cherry-picked"}',
+        'let Oe={committed:"已提交",amended:"已修订提交","cherry-picked":"已拣选提交"}'
+    );
+    tryReplace('ye("push","pushed to",', 'ye("push","推送到",');
+    tryReplace('let Oe={merged:"merged",rebased:"rebased onto"}', 'let Oe={merged:"已合并",rebased:"已变基到"}');
+    tryReplace(
+        'let Oe={created:"created",edited:"edited",merged:"merged",commented:"commented on",closed:"closed",ready:"marked ready",draft:"marked draft","auto-merge-enabled":"enabled auto-merge on","auto-merge-disabled":"disabled auto-merge on"}',
+        'let Oe={created:"已创建",edited:"已编辑",merged:"已合并",commented:"评论了",closed:"已关闭",ready:"已标记就绪",draft:"已标记草稿","auto-merge-enabled":"已开启自动合并","auto-merge-disabled":"已关闭自动合并"}'
+    );
+
+    // Hook 状态行（两种结构）
+    tryRegexReplace(
+        /"Ran ",([A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)+)," ","PreToolUse ",\1===1\?"hook":"hooks"/g,
+        (_m, c) => `"已运行 ",${c}," 个 PreToolUse Hook"`
+    );
+    tryRegexReplace(
+        /"Ran ",([A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)+)," PreToolUse"," ",\1===1\?"hook":"hooks"/g,
+        (_m, c) => `"已运行 ",${c}," 个 PreToolUse Hook"`
+    );
+}
+
+function installConfigRemainderLocalization() {
+    // /config 配置项 label（结构 patch，避免翻译表混杂句子）
+    const configLabels = [
+        ["Theme", "主题"],
+        ["Local notifications", "本地通知"],
+        ["Output style", "输出风格"],
+        ["Language", "语言"],
+        ["Model", "模型"],
+        ["Artifacts", "工件"],
+        ["Ultracode keyword trigger", "Ultracode 关键词触发"],
+        ["Worktree base ref", "Worktree 基准引用"],
+        ["Skip the /copy picker", "跳过 /copy 选择器"],
+        ["Open agents view by default", "默认打开 Agent 视图"],
+        ["Question auto-continue timeout", "问题自动继续超时"],
+        ["Precompute compaction", "预计算压缩"],
+        ["Show message timestamps", "显示消息时间戳"],
+        ["Push when actions required", "需要操作时推送"],
+        ["Push when Claude decides", "Claude 决定时推送"],
+    ];
+    for (const [en, zh] of configLabels) {
+        tryReplace(`label:"${en}"`, `label:"${zh}"`);
+    }
+    // Teammate mode：label 是三元分支里的字面量，不用 `label:` 前缀
+    tryReplace(':"Teammate mode"', ':"协作模式"');
+    tryRegexReplace(/`Teammate mode \[overridden: \$\{([^}]+)\}\]`/g, (_m, expr) => `\`协作模式 [已被覆盖：\${${expr}}]\``);
+    tryReplace('pTr("Auto-scroll",', 'pTr("自动滚动",');
+    tryReplace('pTr("Show last response in external editor",', 'pTr("在外部编辑器中显示最后回复",');
+    tryReplace('"For custom themes, use /theme."', '"自定义主题请使用 /theme。"');
+    tryReplace('"For custom styles, open /config."', '"自定义样式请打开 /config。"');
+    tryReplace('"For a specific model ID, use /model."', '"指定模型 ID 请使用 /model。"');
+    tryReplace('"For a specific model ID, open /config."', '"指定模型 ID 请打开 /config。"');
+    tryReplace(
+        `"Any language name or ISO code (e.g. 'ja'); use 'default' for English."`,
+        `"任意语言名称或 ISO 代码（如 'ja'）；'default' 表示英语。"`
+    );
+    tryRegexReplace(/\(disabled in safe mode\)/g, () => "（安全模式下禁用）");
+}
+
+function installErrorTemplateLocalization() {
+    // CommandExec 状态描述模板（$sg 内 return 语句，均以反引号闭合，不会误伤日志文本）
+    tryRegexReplace(/\`failed with exit code \$\{([^}]+)\}\`/g, (_m, v) => `\`失败，退出码 \${${v}}\``);
+    tryRegexReplace(/\`failed with \$\{([^}]+)\}\`/g, (_m, v) => `\`失败：\${${v}}\``);
+    tryRegexReplace(
+        /\`was killed with \$\{([^}]+)\} \(\$\{([^}]+)\}\)\`/g,
+        (_m, sig, desc) => `\`被终止（\${${sig}}：\${${desc}}）\``
+    );
+    tryRegexReplace(/\`timed out after \$\{([^}]+)\} milliseconds\`/g, (_m, t) => `\`超时（\${${t}} 毫秒）\``);
+}
+
 // === 特殊 patch（基于精确代码模式匹配，安全）===
 // 这些 patch 匹配非常特定的代码模式，不会误伤标识符
 
@@ -967,6 +1159,9 @@ for (const step of [
     installCommonVisibleResidueLocalization,
     installWorkflowLifecycleResidueLocalization,
     installTurnDurationBackgroundLocalization,
+    installStatusbarToolActivityLocalization,
+    installConfigRemainderLocalization,
+    installErrorTemplateLocalization,
 ]) {
     try {
         step();

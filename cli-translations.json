@@ -8152,5 +8152,21 @@
   {
     "en": "📝 Keep thinking...",
     "zh": "📝 继续思考中..."
+  },
+  {
+    "en": "Background command ",
+    "zh": "后台命令 "
+  },
+  {
+    "en": "Switch models when a message is flagged",
+    "zh": "当消息被标记时切换模型"
+  },
+  {
+    "en": "Default (English)",
+    "zh": "默认（英语）"
+  },
+  {
+    "en": "opens agents",
+    "zh": "打开 Agent 视图"
   }
 ]

@@ -6,6 +6,23 @@
 - **次版本号**：新增功能或显著改进（比如新增 patch、新增翻译）
 - **修订号**：Bug 修复和小调整（比如修正一条翻译）
 
+## [2.12.0] - 2026-08-07
+
+### 新增
+
+- 状态栏 ToolActivity 本地化结构 patch：`Thinking`/`Thought` 状态词与时长拼接、mem-search 记忆搜索（正在搜索/已搜索）、searching/editing/publishing/recalling 等 11 组进行中/完成动词、tool/agent 及搜索/读取/列出的数量名词（pattern/file/directory 等）、git 提交/推送/PR 动作对象、Hook 运行状态行（`已运行 N 个 PreToolUse Hook`）、team 记忆摘要。
+- `/config` 剩余项本地化：Theme、Local notifications、Output style、Language、Model、Ultracode keyword trigger、Worktree base ref、Skip the /copy picker、Open agents view by default、Question auto-continue timeout 等配置项 label，以及 `Teammate mode` 及覆盖提示、`Auto-scroll`、`Show last response in external editor`、各选项 hints 与 `(disabled in safe mode)`。
+- 命令执行错误模板本地化：`failed with exit code N`、`was killed with ... (...)`、`timed out after N milliseconds`。
+
+### 修复
+
+- 状态栏搜索/读取摘要（`searching for 1 pattern`、`reading 1 file`）中数量名词因 JSX 数组结构未被替换而残留英文；补全为通用数量名词替换，覆盖对象/数组/模板/属性访问各结构。
+- `Thought 28秒` 等状态栏中 `Thought` 状态词与时长之间残留英文 `for`，改为全角括号拼接（`思考（28秒）`）。
+
+### 验证
+
+- patch-cli 28 项测试、翻译表 schema/quality/派生计数 15 项测试全部通过；对原生 2.1.221 副本运行 patch 后语法校验通过，关键中文字符串抽查全部命中。
+
 ## [2.11.0] - 2026-08-06
 
 ### 新增
