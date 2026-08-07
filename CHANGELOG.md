@@ -6,6 +6,18 @@
 - **次版本号**：新增功能或显著改进（比如新增 patch、新增翻译）
 - **修订号**：Bug 修复和小调整（比如修正一条翻译）
 
+## [2.12.1] - 2026-08-07
+
+### 修复
+
+- 同步根目录与 `plugin/patch-cli.js` 的结构化 patch；插件实际执行的是 `plugin/patch-cli.js`，此前状态栏 ToolActivity 和 `/config` 剩余项规则未随 2.12.0 一起进入插件 payload。
+- 补充两个插件 manifest 的版本同步，确保 Marketplace 更新检查读取的 `plugin/.claude-plugin/plugin.json` 与发布版本一致。
+
+### 验证
+
+- 根目录与 `plugin/` 的 patch、翻译表 payload 已逐文件一致；两份 manifest 均为 2.12.1。
+- `node --check`、`plugin-payload` 和 `patch-cli` 测试通过，共 31 项。
+
 ## [2.12.0] - 2026-08-07
 
 ### 新增
