@@ -203,24 +203,39 @@ function syncCcSwitch(dbFile, overlay) {
 
 // ---- patch 状态报告 ----
 
-function reportPatchStatus(pluginRoot) {
+function reportPatchStatus(pluginRoot, platform = process.platform) {
   // session-start hook 把 patch marker 写在 STATE_ROOT/.patched-version
   // 这里只做只读提示，不手动 patch
   const stateRoot = process.env.CLAUDE_PLUGIN_DATA || process.env.CLAUDE_PLUGIN_ROOT || pluginRoot;
   const markerFile = path.join(stateRoot, ".patched-version");
   const marker = fs.existsSync(markerFile) ? fs.readFileSync(markerFile, "utf8").trim() : "";
+  const isWindows = platform === "win32";
 
   const lines = [];
   if (marker) {
     lines.push(`✓ 已检测到 CLI patch 标记：${marker.split("|")[0]}`);
-    lines.push("  （CLI patch 由 session-start hook 自动维护；Claude Code 更新后会自动重新 patch）");
+    if (isWindows) {
+      lines.push("  （Windows native 不能在运行中热改 exe；Claude Code 更新后需退出全部窗口，再从源码目录重跑 install.ps1 -UpdateOnly）");
+    } else {
+      lines.push("  （CLI patch 由 session-start hook 自动维护；Claude Code 更新后会自动重新 patch）");
+    }
   } else {
     lines.push("ℹ 暂未检测到 CLI patch 标记。这通常表示：");
     lines.push("  - 当前 Claude Code 版本暂不在已验证窗口内（会走 provisional 本机自检），或");
-    lines.push("  - patch 将在下次会话启动时由 hook 自动尝试");
+    if (isWindows) {
+      lines.push("  - Windows native 需手动触发：退出全部 Claude Code 窗口后，从插件源码目录运行 install.ps1 -UpdateOnly");
+    } else {
+      lines.push("  - patch 将在下次会话启动时由 hook 自动尝试");
+    }
   }
   lines.push("");
-  lines.push("如界面仍为英文，请完全退出所有 Claude Code 窗口后重新打开（让 hook 重新 patch）。");
+  if (isWindows) {
+    lines.push("如界面仍为英文（Windows）：请完全退出所有 Claude Code 窗口，然后在插件源码目录运行：");
+    lines.push('  powershell -ExecutionPolicy Bypass -File install.ps1 -UpdateOnly');
+    lines.push("（若当前 setup.js 从插件缓存包运行，缓存包不含 install.ps1，请从 marketplace 源码目录执行上面的命令）");
+  } else {
+    lines.push("如界面仍为英文，请完全退出所有 Claude Code 窗口后重新打开（让 hook 重新 patch）。");
+  }
   return lines.join("\n");
 }
 
@@ -363,6 +378,7 @@ module.exports = {
   fillMissingKeys,
   ccSwitchConfigStatus,
   syncCcSwitch,
+  reportPatchStatus,
   reportSkillTranslation,
   reportCcSwitchSkillDescriptions,
   settingsFile,

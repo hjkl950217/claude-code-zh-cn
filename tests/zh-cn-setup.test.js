@@ -10,6 +10,7 @@ const setupScript = path.join(repoRoot, "plugin", "skills", "zh-cn-setup", "scri
 const {
   ccSwitchConfigStatus,
   fillMissingKeys,
+  reportPatchStatus,
   reportSkillTranslation,
 } = require(setupScript);
 
@@ -122,4 +123,59 @@ test("ccSwitchConfigStatus returns needs-sync for incomplete config", () => {
 test("ccSwitchConfigStatus returns invalid for non-JSON", () => {
   assert.equal(ccSwitchConfigStatus("not json", {}), "invalid");
   assert.equal(ccSwitchConfigStatus("", {}), "invalid");
+});
+
+function withPluginData(value, fn) {
+  const prev = process.env.CLAUDE_PLUGIN_DATA;
+  if (value === undefined) delete process.env.CLAUDE_PLUGIN_DATA;
+  else process.env.CLAUDE_PLUGIN_DATA = value;
+  try {
+    return fn();
+  } finally {
+    if (prev === undefined) delete process.env.CLAUDE_PLUGIN_DATA;
+    else process.env.CLAUDE_PLUGIN_DATA = prev;
+  }
+}
+
+test("reportPatchStatus guides Windows native to install.ps1 -UpdateOnly when marker present", () => {
+  const { tmp, home } = makeTmpHome();
+  const pluginRoot = path.join(home, ".claude", "plugins", "claude-code-zh-cn");
+  fs.mkdirSync(pluginRoot, { recursive: true });
+  fs.writeFileSync(path.join(pluginRoot, ".patched-version"), "native|2.1.224");
+
+  withPluginData(pluginRoot, () => {
+    const out = reportPatchStatus(pluginRoot, "win32");
+    assert.match(out, /已检测到 CLI patch 标记/);
+    assert.match(out, /install\.ps1 -UpdateOnly/);
+    assert.match(out, /完全退出所有 Claude Code 窗口/);
+    assert.match(out, /不能在运行中热改/);
+    assert.doesNotMatch(out, /hook 自动维护/);
+  });
+});
+
+test("reportPatchStatus guides Windows native when marker missing", () => {
+  const { tmp, home } = makeTmpHome();
+  const pluginRoot = path.join(home, ".claude", "plugins", "claude-code-zh-cn");
+
+  withPluginData(pluginRoot, () => {
+    const out = reportPatchStatus(pluginRoot, "win32");
+    assert.match(out, /暂未检测到 CLI patch 标记/);
+    assert.match(out, /手动触发/);
+    assert.match(out, /install\.ps1 -UpdateOnly/);
+    assert.match(out, /缓存包不含 install\.ps1/);
+  });
+});
+
+test("reportPatchStatus keeps hook-based guidance on non-Windows", () => {
+  const { tmp, home } = makeTmpHome();
+  const pluginRoot = path.join(home, ".claude", "plugins", "claude-code-zh-cn");
+  fs.mkdirSync(pluginRoot, { recursive: true });
+  fs.writeFileSync(path.join(pluginRoot, ".patched-version"), "native|2.1.224");
+
+  withPluginData(pluginRoot, () => {
+    const out = reportPatchStatus(pluginRoot, "darwin");
+    assert.match(out, /hook 自动维护/);
+    assert.match(out, /退出所有 Claude Code 窗口后重新打开/);
+    assert.doesNotMatch(out, /install\.ps1 -UpdateOnly/);
+  });
 });

@@ -6,6 +6,17 @@
 - **次版本号**：新增功能或显著改进（比如新增 patch、新增翻译）
 - **修订号**：Bug 修复和小调整（比如修正一条翻译）
 
+## [2.12.2] - 2026-08-07
+
+### 新增
+
+- 支持 Claude Code 2.1.224 Windows native：新增 teamMemory 数量分支（`${X} team memory/memories` 模板与 `条团队记忆` 两态覆盖）和 hook 状态行 active 分支（无 `Ran` 前缀的 `children:...}` 结构）的结构化 patch 规则，消除 2.1.224 引入的三元链结构变化导致的英文残留。
+- Windows native 支持窗口扩展到 `2.1.113 - 2.1.224`（含 `2.1.221 - 2.1.224` 代表版本）。
+
+### 修复
+
+- zh-cn-setup 在 Windows 上给出错误的 CLI patch 恢复指引：native 不能在运行中热改 `claude.exe`，改为提示完全退出所有 Claude Code 窗口后从源码目录运行 `install.ps1 -UpdateOnly`（缓存包不含 install.ps1）。
+
 ## [2.12.1] - 2026-08-07
 
 ### 修复

@@ -1007,6 +1007,25 @@ function installStatusbarToolActivityLocalization() {
             (_m, v) => `${v}===0?"${zhPresent}":"${zhPresent}":${v}===0?"${zhPast}":"${zhPast}"`
         );
     }
+    // 224+ tool activity / teamMemory 摘要动词：条件从 VAR===0 改为 VAR?X.length===0?，
+    // 三元链泛化匹配（VAR?COND?"Present":"lower":COND?"Past":"pastLower"），避免小写动词残留
+    const activityVerbs224 = [
+        ["Searching for", "searching for", "Searched for", "searched for", "正在搜索", "已搜索"],
+        ["Searching", "searching", "Searched", "searched", "正在搜索", "已搜索"],
+        ["Recalling", "recalling", "Recalled", "recalled", "正在回忆", "已回忆"],
+        ["Writing", "writing", "Wrote", "wrote", "正在写入", "已写入"],
+        ["Reading", "reading", "Read", "read", "正在读取", "已读取"],
+        ["Listing", "listing", "Listed", "listed", "正在列出", "已列出"],
+    ];
+    for (const [present, lower, past, pastLower, zhPresent, zhPast] of activityVerbs224) {
+        tryRegexReplace(
+            new RegExp(
+                `([A-Za-z0-9_$]+)\\?([^"]*?)\\?"${present}":"${lower}":\\2\\?"${past}":"${pastLower}"`,
+                "g"
+            ),
+            (_m, v, cond) => `${v}?${cond}?"${zhPresent}":"${zhPresent}":${cond}?"${zhPast}":"${zhPast}"`
+        );
+    }
     // 相关记忆列表（read→正在回忆/已回忆，write→正在记住/已记住）
     tryRegexReplace(
         /([A-Za-z0-9_$]+)\?"Recalling":"Recalled":\1\?"Remembering":"Remembered"/g,
@@ -1071,6 +1090,13 @@ function installStatusbarToolActivityLocalization() {
     tryRegexReplace(/\$\{([A-Za-z0-9_$]+)\} team memories\`/g, (_m, verb) => `\${${verb}} 条团队记忆\``);
     // team 记忆（mem-read 有数量，`team ${X===1?"memory":"memories"}`）
     tryRegexReplace(/team \$\{([A-Za-z0-9_$]+)===1\?"memory":"memories"\}/g, () => "条团队记忆");
+    // team memory 固定复数（224+ 无 team 前缀的 `${X} memories` 模板）
+    tryRegexReplace(/\$\{([A-Za-z0-9_$]+)\} memories\`/g, (_m, verb) => `\${${verb}} 条记忆\``);
+    // team 记忆（224+ 数量分支：memory/memories 可能已被数量名词规则先翻译成"条记忆"，覆盖两态）
+    tryRegexReplace(
+        /team \$\{([A-Za-z0-9_$]+)===1\?(?:"memory":"memories"|"条记忆":"条记忆")\}/g,
+        () => "条团队记忆"
+    );
 
     // git / PR 动词对象
     tryReplace(
@@ -1092,6 +1118,23 @@ function installStatusbarToolActivityLocalization() {
     tryRegexReplace(
         /"Ran ",([A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)+)," PreToolUse"," ",\1===1\?"hook":"hooks"/g,
         (_m, c) => `"已运行 ",${c}," 个 PreToolUse Hook"`
+    );
+    // 224+ 无 Ran 前缀的 hook 状态行（active 分支 Oe("hooks","ran",...) 推送结构）
+    tryRegexReplace(
+        /children:([A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)?)\}\)," PreToolUse"," ",\1===1\?"hook":"hooks"/g,
+        (_m, c) => `children:${c})}," 个 PreToolUse Hook"`
+    );
+
+    // 224+ memoized Hook 状态行（React JSX transform 生成缓存分支，字面量与直接 JSX 分离）
+    // hook/hooks 数量名词（覆盖无 Ran 前缀的直接 JSX 与 memo 分支定义）
+    tryRegexReplace(
+        /([A-Za-z0-9_$]+)===1\?"hook":"hooks"/g,
+        (_m, count) => `${count}===1?"个 Hook":"个 Hook"`
+    );
+    // memo 分支 "Ran " 字面量（children:[...,"Ran ",count," ",hookLabel," ",noun,""]）
+    tryRegexReplace(
+        /"Ran ",([A-Za-z0-9_$]+)," ",([A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)?)," ",([A-Za-z0-9_$]+),""/g,
+        (_m, count, label, noun) => `"已运行 ",${count}," ",${label}," ",${noun},""`
     );
 }
 
