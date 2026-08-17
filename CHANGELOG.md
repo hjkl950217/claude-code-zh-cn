@@ -11,10 +11,15 @@
 ### 新增
 
 - Windows native 支持窗口上限从 `2.1.224` 扩展到 `2.1.233`。2.1.233 与 2.1.224/2.1.226 结构同源（2.1.227+ 上游将 Bun 入口模块从 `/claude` 改名为 `/cli`，已在 2.11.1 适配），patch 规则兼容。
+- 新增 5 条 CLI 硬编码翻译（2.1.233 实测均命中）：
+  - `+${t} lines`（折叠的粘贴文本行数提示）→ `+${t} 行`
+  - `run in background`（`ctrl+b` 后台运行提示）→ `运行到后台`
+  - `(timeout ${...})` 与 `(${...} · timeout ${...})`（任务运行进度里的超时提示）→ `(超时 ${...})` / `(${...} · 超时 ${...})`
+  - `Shell cwd was reset to ${...}`（命令结束后 cwd 重置提示）→ `Shell 已将 cwd 重置为 ${...}`
 
 ### 验证
 
-- 对 `@anthropic-ai/claude-code-win32-x64@2.1.233` 本机离线 `verify-upstream-compat.js --native-windows-x64` 全链路通过：extract / patch（1605 处有效 patch）/ repack / codeSignature / `--version` 启动自检，display runtime 11/11，coverage PARTIAL 24（PARTIAL 为上游新增 CLI help 文案未翻译，与 2.1.226 同性质，不代表 patch 失败）。
+- 对 `@anthropic-ai/claude-code-win32-x64@2.1.233` 本机离线 `verify-upstream-compat.js --native-windows-x64` 全链路通过：extract / patch（1610 处有效 patch）/ repack / codeSignature / `--version` 启动自检，display runtime 11/11，coverage PARTIAL 24（PARTIAL 为上游新增 CLI help 文案未翻译，与 2.1.226 同性质，不代表 patch 失败）。
 
 ## [2.12.0] - 2026-08-16
 

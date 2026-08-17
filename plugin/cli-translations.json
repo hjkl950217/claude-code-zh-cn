@@ -5360,6 +5360,10 @@
     "zh": "运行 ultraplan"
   },
   {
+    "en": "run in background",
+    "zh": "运行到后台"
+  },
+  {
     "en": "Run ultrareview in the cloud?",
     "zh": "在云端运行 ultrareview？"
   },
@@ -5581,6 +5585,14 @@
     "zh": "发送 ping 超时"
   },
   {
+    "en": "(timeout ${...})",
+    "zh": "(超时 ${...})"
+  },
+  {
+    "en": "(${...} \\xB7 timeout ${...})",
+    "zh": "(${...} \\xB7 超时 ${...})"
+  },
+  {
     "en": "Sending token request to endpoint:",
     "zh": "正在向端点发送令牌请求："
   },
@@ -5767,6 +5779,10 @@
   {
     "en": "Sharing transcript",
     "zh": "分享对话记录"
+  },
+  {
+    "en": "${...}\nShell cwd was reset to ${...}",
+    "zh": "${...}\nShell 已将 cwd 重置为 ${...}"
   },
   {
     "en": "Shell command failed",
@@ -8144,6 +8160,10 @@
   {
     "en": "⧉ selected lines",
     "zh": "⧉ 已选行"
+  },
+  {
+    "en": " lines]",
+    "zh": " 行]"
   },
   {
     "en": "📝 Keep thinking...",
