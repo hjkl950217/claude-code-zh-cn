@@ -512,7 +512,7 @@ test("install.ps1 gates Windows native patch through support window and node-lie
   assert.match(nativePatch, /需要安装 node-lief[\s\S]+write-support-window-link[\s\S]+\$script:CliPatchStatusSummary/);
   assert.match(nativePatch, /本机自验证未找到可 patch 内容[\s\S]+write-support-window-link[\s\S]+return/);
   assert.match(nativePatch, /Windows 原生二进制 patch 失败[\s\S]+write-support-window-link[\s\S]+\$script:CliPatchStatusSummary/);
-  assert.match(nativePatch, /原生二进制被运行中的 Claude Code 进程占用[\s\S]+write-support-window-link[\s\S]+\$script:CliPatchStatusSummary/);
+  assert.match(nativePatch, /原生二进制被运行中的 Claude Code 进程占用[\s\S]+请手动退出所有 Claude Code 实例[\s\S]+write-support-window-link[\s\S]+exit 1/);
   assert.match(nativePatch, /test-binary-writable \$BinaryPath/);
   assert.match(script, /node \$helper check-deps/);
   assert.match(script, /node \$helper extract \$BinaryPath \$tmpJs/);

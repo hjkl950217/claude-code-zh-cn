@@ -1197,11 +1197,13 @@ function patch-native-bun {
         $procs = find-claude-processes
         $procList = ($procs | ForEach-Object { "PID=$($_.Id)" }) -join ", "
         if (-not $procList) { $procList = "（未列出 claude 进程，可能由其他句柄占用）" }
-        Write-CN "  原生二进制被运行中的 Claude Code 进程占用，无法写入（$procList）" Yellow
-        Write-CN "  下一步：关闭所有 Claude Code 窗口（含本会话）后，重新运行 install.ps1；Layer 1~3 已生效，CLI Patch 待重跑。" Yellow
+        Write-CN "  原生二进制被运行中的 Claude Code 进程占用，无法写入（$procList）" Red
+        Write-CN "  请手动退出所有 Claude Code 实例（关闭所有 CC 窗口，含当前会话），然后重新运行 install.ps1。" Yellow
+        Write-CN "  Layer 1~3（settings / 插件目录 / hooks）已在本会话写入；CLI Patch 待所有实例退出后重跑才能完成。" Yellow
         write-support-window-link
-        $script:CliPatchStatusSummary = "已跳过（原生二进制被运行中的 Claude Code 占用，关闭所有 CC 窗口后重跑）"
-        return
+        $script:CliPatchStatusSummary = "已中止（原生二进制被运行中的 Claude Code 占用，需手动退出所有 claude 实例后重跑）"
+        Write-CN "脚本停止。" Red
+        exit 1
     }
 
     $depStatus = (node $helper check-deps 2>$null)
