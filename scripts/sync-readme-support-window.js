@@ -285,11 +285,13 @@ function main() {
 
   const config = readJson(args.config);
   const original = fs.readFileSync(args.readme, "utf8");
-  const next = syncReadme(original, config);
+  const newline = original.includes("\r\n") ? "\r\n" : "\n";
+  const normalizedOriginal = original.replace(/\r\n?/g, "\n");
+  const normalizedNext = syncReadme(normalizedOriginal, config);
 
-  if (next !== original) {
+  if (normalizedNext !== normalizedOriginal) {
     if (args.write) {
-      fs.writeFileSync(args.readme, next);
+      fs.writeFileSync(args.readme, normalizedNext.replace(/\n/g, newline));
       process.stdout.write(`readme support window updated: ${path.relative(repoRoot, args.readme)}\n`);
     } else {
       console.error(`${path.relative(repoRoot, args.readme)}: README support window is stale`);

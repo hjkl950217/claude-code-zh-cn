@@ -180,4 +180,14 @@ test("README support window sync rewrites badges, support table, and install adv
     path.join(tmpDir, "config.json"),
   ]);
   assert.equal(checkResult.status, 0, checkResult.stderr || checkResult.stdout);
+
+  fs.writeFileSync(readmePath, fs.readFileSync(readmePath, "utf8").replace(/\n/g, "\r\n"));
+  const crlfCheckResult = runSync([
+    "--check",
+    "--readme",
+    readmePath,
+    "--config",
+    path.join(tmpDir, "config.json"),
+  ]);
+  assert.equal(crlfCheckResult.status, 0, crlfCheckResult.stderr || crlfCheckResult.stdout);
 });
