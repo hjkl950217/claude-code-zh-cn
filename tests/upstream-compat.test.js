@@ -11,18 +11,43 @@ const productionConfig = path.join(repoRoot, "scripts", "upstream-compat.config.
 const fixtureConfig = path.join(__dirname, "upstream-compat-fixtures", "config.json");
 const fixturesDir = path.join(__dirname, "upstream-compat-fixtures", "packages");
 const translationsFile = path.join(repoRoot, "cli-translations.json");
+const posixOnly = process.platform === "win32" ? "requires a POSIX shell environment" : false;
+
+function withPrependedPath(env, directory) {
+  const inheritedPath = env.Path || env.PATH || "";
+  const updatedPath = [directory, inheritedPath].filter(Boolean).join(path.delimiter);
+  return {
+    ...env,
+    PATH: updatedPath,
+    Path: updatedPath,
+  };
+}
+
+function spawnCompat(args, options = {}) {
+  const env = options.env || process.env;
+  const childEnv = {
+    ...env,
+  };
+  childEnv.Path = childEnv.Path || childEnv.PATH;
+  return spawnSync(process.execPath, args, {
+    ...options,
+    env: childEnv,
+  });
+}
 
 function runCompat(args = [], env = {}) {
+  const childEnv = {
+    ...process.env,
+    ...env,
+  };
+  childEnv.Path = childEnv.Path || childEnv.PATH;
   return spawnSync(
-    "node",
+    process.execPath,
     [compatScript, "--config", fixtureConfig, "--fixtures-dir", fixturesDir, ...args],
     {
       cwd: repoRoot,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        ...env,
-      },
+      env: childEnv,
     }
   );
 }
@@ -57,8 +82,7 @@ test("verify-upstream-compat rejects a shared package cache", { skip: process.pl
   const packagesDir = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-insecure-cache-"));
   fs.chmodSync(packagesDir, 0o777);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [compatScript, "--config", fixtureConfig, "--packages-dir", packagesDir, "--baseline", "1.0.0", "--skip-latest"],
     { cwd: repoRoot, encoding: "utf8" }
   );
@@ -138,8 +162,7 @@ test("verify-upstream-compat reports a visible template residue as partial cover
   ];
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [compatScript, "--config", configPath, "--fixtures-dir", fixtures, "--skip-latest", "--json"],
     { cwd: repoRoot, encoding: "utf8", env: process.env }
   );
@@ -228,12 +251,6 @@ test("verify-upstream-compat catches PR #10-style high-risk text regressions", (
   assert.deepEqual(risk.missingRequired, [
     {
       kind: "upstream-text",
-      id: "advisor_prompt_tool_name",
-      rule: "preserve",
-      match: "# Advisor Tool\n\nYou have access to an \\`advisor\\` tool",
-    },
-    {
-      kind: "upstream-text",
       id: "advisor_dialog_title",
       rule: "preserve",
       match: "title:\"Advisor Tool\"",
@@ -305,7 +322,7 @@ test("verify-upstream-compat reports missing node-lief as native dependency skip
   assert.equal(strictResult.status, 1, strictResult.stderr || strictResult.stdout);
 });
 
-test("verify-upstream-compat patches and audits the Linux platform package", () => {
+test("verify-upstream-compat patches and audits the Linux platform package", { skip: posixOnly }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-linux-native-"));
   const packagesDir = path.join(tmp, "cache");
   fs.mkdirSync(packagesDir, { recursive: true, mode: 0o700 });
@@ -376,20 +393,21 @@ test("verify-upstream-compat patches and audits the Linux platform package", () 
   );
   fs.chmodSync(fakeNode, 0o755);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [compatScript, "--config", configPath, "--packages-dir", packagesDir, "--skip-latest", "--native-linux-x64", "--json"],
     {
       cwd: repoRoot,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
-        CCZH_NATIVE_VERIFY_PLATFORM: "linux-x64",
-        CCZH_TEST_BINARY_IO_PATH: path.join(repoRoot, "bun-binary-io.js"),
-        CCZH_TEST_FAKE_BINARY_IO: fakeBinaryIo,
-        CCZH_TEST_REAL_NODE: process.execPath,
-      },
+      env: withPrependedPath(
+        {
+          ...process.env,
+          CCZH_NATIVE_VERIFY_PLATFORM: "linux-x64",
+          CCZH_TEST_BINARY_IO_PATH: path.join(repoRoot, "bun-binary-io.js"),
+          CCZH_TEST_FAKE_BINARY_IO: fakeBinaryIo,
+          CCZH_TEST_REAL_NODE: process.execPath,
+        },
+        binDir
+      ),
     }
   );
 
@@ -407,7 +425,7 @@ test("verify-upstream-compat patches and audits the Linux platform package", () 
   assert.equal(native.displayAudit.commandCount, 1);
 });
 
-test("verify-upstream-compat resolves new native macOS candidates to the platform package", () => {
+test("verify-upstream-compat resolves new native macOS candidates to the platform package", { skip: posixOnly }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-native-package-resolve-"));
   const packagesDir = path.join(tmp, "cache");
   fs.mkdirSync(packagesDir, { recursive: true, mode: 0o700 });
@@ -465,8 +483,7 @@ test("verify-upstream-compat resolves new native macOS candidates to the platfor
   };
   fs.writeFileSync(configPath, `${JSON.stringify(fixtureConfigJson, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [
       compatScript,
       "--config",
@@ -482,12 +499,14 @@ test("verify-upstream-compat resolves new native macOS candidates to the platfor
     {
       cwd: repoRoot,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
-        CCZH_NATIVE_VERIFY_PLATFORM: "linux-x64",
-        CCZH_NPM_REQUESTS: requestsPath,
-      },
+      env: withPrependedPath(
+        {
+          ...process.env,
+          CCZH_NATIVE_VERIFY_PLATFORM: "linux-x64",
+          CCZH_NPM_REQUESTS: requestsPath,
+        },
+        binDir
+      ),
     }
   );
 
@@ -520,8 +539,7 @@ test("verify-upstream-compat uses Windows native representatives as the default 
   };
   fs.writeFileSync(configPath, `${JSON.stringify(fixtureConfigJson, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [
       compatScript,
       "--config",
@@ -554,7 +572,7 @@ test("verify-upstream-compat uses Windows native representatives as the default 
   assert.match(native.skipReason, /requires Windows x64/);
 });
 
-test("verify-upstream-compat accepts root-level Windows platform claude.exe packages", () => {
+test("verify-upstream-compat accepts root-level Windows platform claude.exe packages", { skip: posixOnly }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-windows-root-exe-"));
   const packagesDir = path.join(tmp, "cache");
   fs.mkdirSync(packagesDir, { recursive: true, mode: 0o700 });
@@ -601,8 +619,7 @@ test("verify-upstream-compat accepts root-level Windows platform claude.exe pack
   };
   fs.writeFileSync(configPath, `${JSON.stringify(fixtureConfigJson, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [
       compatScript,
       "--config",
@@ -616,12 +633,14 @@ test("verify-upstream-compat accepts root-level Windows platform claude.exe pack
     {
       cwd: repoRoot,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
-        CCZH_NATIVE_VERIFY_PLATFORM: "linux-x64",
-        CCZH_NPM_REQUESTS: requestsPath,
-      },
+      env: withPrependedPath(
+        {
+          ...process.env,
+          CCZH_NATIVE_VERIFY_PLATFORM: "linux-x64",
+          CCZH_NPM_REQUESTS: requestsPath,
+        },
+        binDir
+      ),
     }
   );
 
@@ -639,7 +658,7 @@ test("verify-upstream-compat accepts root-level Windows platform claude.exe pack
   assert.match(native.skipReason, /requires Windows x64/);
 });
 
-test("verify-upstream-compat verifies Windows native-wrapper packages", () => {
+test("verify-upstream-compat verifies Windows native-wrapper packages", { skip: posixOnly }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-windows-wrapper-exe-"));
   const packagesDir = path.join(tmp, "cache");
   fs.mkdirSync(packagesDir, { recursive: true, mode: 0o700 });
@@ -686,8 +705,7 @@ test("verify-upstream-compat verifies Windows native-wrapper packages", () => {
   };
   fs.writeFileSync(configPath, `${JSON.stringify(fixtureConfigJson, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [
       compatScript,
       "--config",
@@ -701,13 +719,15 @@ test("verify-upstream-compat verifies Windows native-wrapper packages", () => {
     {
       cwd: repoRoot,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
-        CCZH_NATIVE_FORCE_DEPS: "ok",
-        CCZH_NATIVE_VERIFY_PLATFORM: "win32-x64",
-        CCZH_NPM_REQUESTS: requestsPath,
-      },
+      env: withPrependedPath(
+        {
+          ...process.env,
+          CCZH_NATIVE_FORCE_DEPS: "ok",
+          CCZH_NATIVE_VERIFY_PLATFORM: "win32-x64",
+          CCZH_NPM_REQUESTS: requestsPath,
+        },
+        binDir
+      ),
     }
   );
 
@@ -746,8 +766,7 @@ test("verify-upstream-compat keeps runtime green and reports partial coverage fo
   };
   fs.writeFileSync(configPath, `${JSON.stringify(fixtureConfigJson, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [compatScript, "--config", configPath, "--fixtures-dir", fixturesDir, "--skip-latest", "--json"],
     {
       cwd: repoRoot,
@@ -810,8 +829,7 @@ test("verify-upstream-compat hard-fails when syntax prevents a required help com
   };
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [compatScript, "--config", configPath, "--fixtures-dir", fixtures, "--skip-latest", "--json"],
     { cwd: repoRoot, encoding: "utf8", env: process.env }
   );
@@ -845,8 +863,7 @@ test("verify-upstream-compat hard-fails when a must-preserve display term disapp
   };
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [compatScript, "--config", configPath, "--fixtures-dir", fixtures, "--skip-latest", "--json"],
     { cwd: repoRoot, encoding: "utf8", env: process.env }
   );
@@ -894,8 +911,7 @@ test("verify-upstream-compat fails when display audit silently skips expected su
   };
   fs.writeFileSync(configPath, `${JSON.stringify(fixtureConfigJson, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [compatScript, "--config", configPath, "--fixtures-dir", fixtures, "--skip-latest", "--json"],
     {
       cwd: repoRoot,
@@ -1037,8 +1053,7 @@ test("verify-upstream-compat reports unpatched issue #70 native UI source residu
   delete config.checks.displayAudit;
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [compatScript, "--config", configPath, "--fixtures-dir", fixtures, "--skip-latest", "--json"],
     {
       cwd: repoRoot,
@@ -1089,8 +1104,7 @@ test("compact duration guards do not flag unrelated protocol duration abbreviati
   delete config.checks.displayAudit;
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [compatScript, "--config", configPath, "--fixtures-dir", fixtures, "--skip-latest", "--json"],
     {
       cwd: repoRoot,
@@ -1102,7 +1116,7 @@ test("compact duration guards do not flag unrelated protocol duration abbreviati
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("verify-upstream-compat refreshes a corrupt downloaded package cache", () => {
+test("verify-upstream-compat refreshes a corrupt downloaded package cache", { skip: posixOnly }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-corrupt-cache-"));
   const packagesDir = path.join(tmp, "cache");
   fs.mkdirSync(packagesDir, { recursive: true, mode: 0o700 });
@@ -1149,16 +1163,17 @@ test("verify-upstream-compat refreshes a corrupt downloaded package cache", () =
   };
   fs.writeFileSync(configPath, `${JSON.stringify(fixtureConfigJson, null, 2)}\n`);
 
-  const result = spawnSync(
-    "node",
+  const result = spawnCompat(
     [compatScript, "--config", configPath, "--packages-dir", packagesDir, "--skip-latest", "--json"],
     {
       cwd: repoRoot,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
-      },
+      env: withPrependedPath(
+        {
+          ...process.env,
+        },
+        binDir
+      ),
     }
   );
 

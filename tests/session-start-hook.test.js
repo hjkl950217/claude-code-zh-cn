@@ -1,4 +1,4 @@
-const test = require("node:test");
+const nodeTest = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -7,9 +7,25 @@ const crypto = require("node:crypto");
 const { execFileSync, spawn, spawnSync } = require("node:child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
+const unixOnly = process.platform === "win32" ? "requires a POSIX shell environment" : false;
 const hookPath = path.join(repoRoot, "plugin", "hooks", "session-start");
 const nativeSupport = require(path.join(repoRoot, "scripts", "upstream-compat.config.json")).support
   .macosNativeExperimental;
+
+const windowsSafeTests = new Set([
+  "Windows session-start hook repairs settings from cached overlay",
+  "Windows session-start hook never rewrites the running native exe and records a safe manual handoff",
+  "Unix session-start serializes native and npm patch transactions",
+  "session-start context protects machine-readable configuration",
+  "session-start bounds update checks and never runs a standalone installer mid-session",
+  "skill-i18n 默认禁用，需 ZH_CN_SKILL_I18N_ENABLE=1 才触发，HOOK=1 防递归（review #1/#3）",
+  "skill-i18n 超时用 kill -- -PID 杀进程组，subshell+node+claude 孙子都停（review）",
+]);
+const test = (name, options, fn) => {
+  const skip = unixOnly && !windowsSafeTests.has(name) ? unixOnly : false;
+  if (typeof options === "function") return nodeTest(name, { skip }, options);
+  return nodeTest(name, { ...options, skip: options.skip || skip }, fn);
+};
 
 function bumpPatch(version, amount) {
   const parts = String(version).split(".").map((part) => Number.parseInt(part, 10));

@@ -972,6 +972,19 @@ function installTurnDurationBackgroundLocalization() {
     );
 }
 
+function installCli233DisplayResidueLocalization() {
+    // 2.1.233 的流响应停滞提示拆成 JSX children 数组，时间值为动态插值，
+    // 因此不能由静态翻译表覆盖。仅替换完整的三段可见文案结构。
+    tryRegexReplace(/"Waiting for API response"/g, () => '"等待 API 响应"');
+    tryRegexReplace(
+        /children:\[" \\xB7 will retry in ",([A-Za-z0-9_$]+)," \\xB7 check your network"\]/g,
+        (_match, remaining) => `children:[" \\xB7 将在 ",${remaining}," 后重试 \\xB7 请检查网络"]`
+    );
+
+    // 新版展开提示从快捷键绑定动态生成：`(${shortcut} to expand)`。
+    tryRegexReplace(/\$\{([A-Za-z0-9_$]+)\} to expand/g, (_match, shortcut) => `\${${shortcut}} 展开`);
+}
+
 function installStatusbarToolActivityLocalization() {
     // Thought 状态栏（进行中 Thinking / 完成 Thought）
     tryRegexReplace(/([A-Za-z0-9_$]+)\?"Thinking":"Thought"/g, (_m, v) => `${v}?"思考中":"思考"`);
@@ -1223,6 +1236,7 @@ for (const step of [
     installWorkflowLifecycleResidueLocalization,
     installCli226DisplayDeltaLocalization,
     installTurnDurationBackgroundLocalization,
+    installCli233DisplayResidueLocalization,
     installStatusbarToolActivityLocalization,
     installConfigRemainderLocalization,
     installErrorTemplateLocalization,

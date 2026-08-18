@@ -67,6 +67,22 @@ test("new status families localize Thought, duration hints and running shells", 
   assert.match(patched, /`沏了 \$\{elapsed\} · \$\{count\} 个 shell 仍在运行`/);
 });
 
+test("native 2.1.233 retry warning and dynamic expand hint are localized", () => {
+  const patched = patchFixture([
+    'let stalled=wh.jsx(_,{color:"error",children:"Waiting for API response"});',
+    'let retry=wh.jsxs(_,{dimColor:!0,children:[" \\xB7 will retry in ",remaining," \\xB7 check your network"]});',
+    'function expandHint(shortcut){return Xt.dim(`(${shortcut} to expand)`)}',
+    '',
+  ]);
+
+  for (const residue of ["Waiting for API response", "will retry in", "check your network", "to expand"]) {
+    assert.equal(patched.includes(residue), false, patched);
+  }
+  assert.match(patched, /"等待 API 响应"/);
+  assert.match(patched, /" \\xB7 将在 ",remaining," 后重试 \\xB7 请检查网络"/);
+  assert.match(patched, /`\(\$\{shortcut\} 展开\)`/);
+});
+
 test("recap status literals are localized", () => {
   const patched = patchFixture([
     'const title="Session recap";',

@@ -636,6 +636,11 @@ function cmdExtract() {
     process.exit(1);
   }
 
+  if (fs.existsSync(outputPath) && fs.lstatSync(outputPath).isSymbolicLink()) {
+    process.stderr.write("Error: refusing to write through symbolic link output path\n");
+    process.exit(1);
+  }
+
   const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC |
     (fs.constants.O_NOFOLLOW || 0);
   const output = fs.openSync(outputPath, flags, 0o600);

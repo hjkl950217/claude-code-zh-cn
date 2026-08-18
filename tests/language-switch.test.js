@@ -15,6 +15,7 @@ function runHook(home, prompt) {
     env: {
       ...process.env,
       HOME: home,
+      CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
       CLAUDE_PLUGIN_ROOT: path.join(repoRoot, "plugin"),
       CCZH_DRY_RUN: "",
       // 只保留 node 所在目录，确保 detectInstallation 找不到 claude，测试只验证设置层
