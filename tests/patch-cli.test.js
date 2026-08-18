@@ -67,6 +67,37 @@ test("new status families localize Thought, duration hints and running shells", 
   assert.match(patched, /`沏了 \$\{elapsed\} · \$\{count\} 个 shell 仍在运行`/);
 });
 
+test("pasted text protocol stays parseable while visible line counts are localized", () => {
+  const patched = patchFixture([
+    'function pasteLabel(id,count){if(count===0)return`[Pasted text #${id}]`;return`[Pasted text #${id} +${count} lines]`}',
+    'function damagedPasteLabel(id,count){if(count===0)return`[Pasted text #${id}]`;return`[Pasted text #${id} +${count} 行]`}',
+    'function parsePaste(text){return /\\[(Pasted text|Image) #(\\d+)(?: \\+\\d+ lines)?\\]/g.test(text)}',
+    'function lineCount(count,unit="line"){if(count<=0)return"";return`… +${count} ${pluralize(count,unit)}`}',
+    '',
+  ]);
+
+  assert.equal(patched.includes('+${count} 行]'), false, patched);
+  assert.equal((patched.match(/`\[Pasted text #\$\{id\} \+\$\{count\} lines\]`/g) || []).length, 2, patched);
+  assert.match(patched, /\\\+\\d\+ lines/);
+  assert.match(patched, /function lineCount\(count,unit="line"\)\{if\(count<=0\)return"";return`… \+\$\{count\} 行`\}/);
+});
+
+test("visible Running labels are localized without changing tool metadata", () => {
+  const patched = patchFixture([
+    'let shell=ui.jsx(Text,{dimColor:true,children:"Running\\u2026 "});',
+    'function progress(last){if(!last?.data)return ui.jsx(Text,{children:"Running\\u2026"});if(last.data.progress===void 0)return ui.jsx(Text,{children:"Running\\u2026"})}',
+    'let toolStatus=hasTool?`运行中 ${tool.name}(${input})\\u2026`:"Running\\u2026";let rendered=ui.jsxs(Text,{children:["(",toolStatus," ",elapsed,")"]});',
+    'let toolLabels={Bash:"Running",Task:"Running task",status:"running"};',
+    '',
+  ]);
+
+  assert.equal(patched.includes('children:"Running\\u2026'), false, patched);
+  assert.match(patched, /children:"运行中… /);
+  assert.match(patched, /children:"运行中…"/);
+  assert.match(patched, /hasTool\?`运行中 \$\{tool\.name\}\(\$\{input\}\)\\u2026`:"运行中…"/);
+  assert.match(patched, /Bash:"Running",Task:"Running task",status:"running"/);
+});
+
 test("native 2.1.233 retry warning and dynamic expand hint are localized", () => {
   const patched = patchFixture([
     'let stalled=wh.jsx(_,{color:"error",children:"Waiting for API response"});',
@@ -81,6 +112,45 @@ test("native 2.1.233 retry warning and dynamic expand hint are localized", () =>
   assert.match(patched, /"等待 API 响应"/);
   assert.match(patched, /" \\xB7 将在 ",remaining," 后重试 \\xB7 请检查网络"/);
   assert.match(patched, /`\(\$\{shortcut\} 展开\)`/);
+});
+
+test("goal active indicator is localized without changing command tokens", () => {
+  const patched = patchFixture([
+    'let indicator=ui.jsxs(Text,{color:color,children:[ui.jsxs(Text,{children:[glyph," "]}),"/goal active",elapsed]});',
+    'let command={name:"/goal",status:"active"};',
+    '',
+  ]);
+
+  assert.match(patched, /,"\/goal 已启用",elapsed/);
+  assert.match(patched, /name:"\/goal",status:"active"/);
+});
+
+test("goal progress statuses and statistics are localized", () => {
+  const patched = patchFixture([
+    'let status=failed?"Goal could not be achieved":met?"Goal achieved":"Goal not yet met\\u2026 continuing";',
+    'let details=` (${parts.join(" \\xB7 ")})`;',
+    'parts.push(`${duration} ${turns}`);',
+    'case"goal_status":{if(goal.tokens!==void 0){parts.push(`${tokenCount} tokens`)}const statusAgain=failed?"Goal could not be achieved":met?"Goal achieved":"Goal not yet met\\u2026 continuing";}',
+    'let condition=eo.jsxs(_,{children:["Goal: ",goal.condition]});',
+    'function goalHint(){let memo=cache.c(3),first=React.useContext(primary),second=React.useContext(secondary),shortcut=ox("app:toggleTranscript","Global","ctrl+o");if(first||second){return null}let format;if(memo[0]===seed)format={keyCase:"lower"},memo[0]=format;else format=memo[0];let result;if(memo[1]!==shortcut)result=scr.jsx(_,{dimColor:!0,children:scr.jsx(it,{chord:shortcut,action:"expand",parens:!0,format:format})}),memo[1]=shortcut,memo[2]=result;else result=memo[2];return result}',
+    'let anotherHint=eQe.jsx(it,{chord:otherShortcut,action:"expand",parens:!0,format:otherFormat});',
+    'let unrelated=description==="Goal: ";',
+    'let unrelatedTokens=`${otherTokenCount} tokens`;',
+    '',
+  ]);
+
+  for (const residue of ["Goal could not be achieved", "Goal achieved", "Goal not yet met"]) {
+    assert.equal(patched.includes(residue), false, patched);
+  }
+  assert.match(patched, /"未能达成目标"/);
+  assert.match(patched, /"目标已达成"/);
+  assert.match(patched, /"目标尚未达成…继续执行"/);
+  assert.match(patched, /`\$\{tokenCount\} 个 token`/);
+  assert.match(patched, /children:\["目标：",goal\.condition\]/);
+  assert.match(patched, /chord:shortcut,action:"展开"/);
+  assert.match(patched, /chord:otherShortcut,action:"expand"/);
+  assert.match(patched, /description==="Goal: "/);
+  assert.match(patched, /`\$\{otherTokenCount\} tokens`/);
 });
 
 test("recap status literals are localized", () => {

@@ -277,6 +277,10 @@ function escapeSingleQuotedLiteralNeedleContent(text) {
         .replace(/'/g, "\\'");
 }
 
+function isProtectedProtocolLiteral(literal) {
+    return literal.quote === "`" && literal.text.startsWith("[Pasted text #${") && literal.text.endsWith(" lines]");
+}
+
 function replaceTemplateLiteralTextParts(parts, en, zh) {
     let hit = false;
     for (const part of parts) {
@@ -972,6 +976,37 @@ function installTurnDurationBackgroundLocalization() {
     );
 }
 
+function installPastedTextProtocolRepair() {
+    // 旧版补丁曾把粘贴附件协议中的 `lines]` 翻译为 `行]`，但解析器只接受英文。
+    // 仅修复 Pasted text 模板生成器，使已 patch 的安装可通过再次安装原地恢复。
+    tryRegexReplace(
+        /(`\[Pasted text #\$\{[A-Za-z0-9_$]+\} \+\$\{[A-Za-z0-9_$]+\} )行(\]`)/g,
+        (_match, prefix, suffix) => `${prefix}lines${suffix}`
+    );
+}
+
+function installRunningDisplayLocalization() {
+    // 只匹配 JSX children 中的进行中占位文案；工具类型映射里的 Running、
+    // 状态枚举 running 以及帮助示例保持原值。
+    tryRegexReplace(
+        /(children:)"Running\\u2026( ?")/g,
+        (_match, prefix, suffix) => `${prefix}"运行中…${suffix}`
+    );
+    tryRegexReplace(
+        /(\?`运行中 \$\{[^}]+\}\(\$\{[^}]+\}\)\\u2026`:)"Running\\u2026"/g,
+        (_match, prefix) => `${prefix}"运行中…"`
+    );
+}
+
+function installVisibleLineCountLocalization() {
+    // kAt() 只负责折叠内容的可见“+N lines”摘要。直接输出“行”，
+    // 不触碰 Pasted text 占位符中供附件解析器使用的英文协议。
+    tryRegexReplace(
+        /(function [A-Za-z0-9_$]+\(([A-Za-z0-9_$]+),([A-Za-z0-9_$]+)="line"\)\{if\(\2<=0\)return"";return`)(\\u2026|…) \+\$\{\2\} \$\{[A-Za-z0-9_$]+\(\2,\3\)\}(`\})/g,
+        (_match, prefix, countValue, _unit, ellipsis, suffix) => `${prefix}${ellipsis} +\${${countValue}} 行${suffix}`
+    );
+}
+
 function installCli233DisplayResidueLocalization() {
     // 2.1.233 的流响应停滞提示拆成 JSX children 数组，时间值为动态插值，
     // 因此不能由静态翻译表覆盖。仅替换完整的三段可见文案结构。
@@ -983,6 +1018,38 @@ function installCli233DisplayResidueLocalization() {
 
     // 新版展开提示从快捷键绑定动态生成：`(${shortcut} to expand)`。
     tryRegexReplace(/\$\{([A-Za-z0-9_$]+)\} to expand/g, (_match, shortcut) => `\${${shortcut}} 展开`);
+
+    // yS() 是 /goal 等状态卡片复用的展开辅助组件。使用它的完整函数结构作为锚点，
+    // 仅改动该组件提供给 Chord 的可见 action，避免触及其他 action:"expand"。
+    tryRegexReplace(
+        /(function [A-Za-z0-9_$]+\(\)\{let [A-Za-z0-9_$]+=\w+\.c\(3\),[A-Za-z0-9_$]+=\w+\.useContext\([A-Za-z0-9_$]+\),[A-Za-z0-9_$]+=\w+\.useContext\([A-Za-z0-9_$]+\),[A-Za-z0-9_$]+=ox\("app:toggleTranscript","Global","ctrl\+o"\);if\([A-Za-z0-9_$]+\|\|[A-Za-z0-9_$]+\)\{return null\}[\s\S]*?chord:[A-Za-z0-9_$]+,action:)"expand"/g,
+        (_match, prefix) => `${prefix}"展开"`
+    );
+}
+
+function installGoalActiveIndicatorLocalization() {
+    // /goal 状态栏把命令名与状态词拼成一个可见 children 字面量。
+    // 只替换位于 children 数组、后接动态时长的显示文本，不改命令名和 active 状态值。
+    tryRegexReplace(
+        /(children:\[[\s\S]{0,300}?)"\/goal active"(,[A-Za-z0-9_$]+\]\})/g,
+        (_match, prefix, suffix) => `${prefix}"/goal 已启用"${suffix}`
+    );
+}
+
+function installGoalDisplayLocalization() {
+    // 2.1.233 的 /goal 状态卡片由条件表达式和动态统计拼接而成，
+    // 不会命中静态翻译表；只替换完整的可见字面量，不改状态值或数据字段。
+    tryRegexReplace(/"Goal could not be achieved"/g, () => '"未能达成目标"');
+    tryRegexReplace(/"Goal achieved"/g, () => '"目标已达成"');
+    tryRegexReplace(/"Goal not yet met\\u2026 continuing"/g, () => '"目标尚未达成…继续执行"');
+    tryRegexReplace(
+        /children:\["Goal: ",([A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)?)\]/g,
+        (_match, condition) => `children:["目标：",${condition}]`
+    );
+    tryRegexReplace(
+        /(case"goal_status"[\s\S]*?\.tokens!==void 0\)\{[A-Za-z0-9_$]+\.push\(`\$\{[A-Za-z0-9_$]+\} tokens`\)\})/g,
+        (_match, goalStatusBlock) => goalStatusBlock.replace(/ tokens`\)\}/, " 个 token`)}")
+    );
 }
 
 function installStatusbarToolActivityLocalization() {
@@ -1236,7 +1303,12 @@ for (const step of [
     installWorkflowLifecycleResidueLocalization,
     installCli226DisplayDeltaLocalization,
     installTurnDurationBackgroundLocalization,
+    installPastedTextProtocolRepair,
+    installRunningDisplayLocalization,
+    installVisibleLineCountLocalization,
     installCli233DisplayResidueLocalization,
+    installGoalActiveIndicatorLocalization,
+    installGoalDisplayLocalization,
     installStatusbarToolActivityLocalization,
     installConfigRemainderLocalization,
     installErrorTemplateLocalization,
@@ -1439,6 +1511,9 @@ if (translationsFile && fs.existsSync(translationsFile)) {
 
         let hit = false;
         for (const literal of literals) {
+            if (isProtectedProtocolLiteral(literal)) {
+                continue;
+            }
             if (literal.quote === "`") {
                 if (!replaceWholeTemplateLiteral(literal, en, zh)) {
                     if (!replaceTemplateLiteralTextParts(literal.parts, en, zh)) {
