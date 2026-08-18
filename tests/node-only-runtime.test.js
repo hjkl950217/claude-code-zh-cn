@@ -6,6 +6,7 @@ const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
+const unixOnly = process.platform === "win32" ? "requires a POSIX shell environment" : false;
 
 function locateCommand(command) {
   return execFileSync("/usr/bin/which", [command], { encoding: "utf8" }).trim();
@@ -44,7 +45,7 @@ function copyTree(src, dst) {
   fs.copyFileSync(src, dst);
 }
 
-test("install.sh works without python3 when node is available", () => {
+test("install.sh works without python3 when node is available", { skip: unixOnly }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-node-only-install-"));
   const home = path.join(tmp, "home");
   const binDir = path.join(tmp, "bin");
@@ -70,7 +71,7 @@ test("install.sh works without python3 when node is available", () => {
   assert.equal(fs.existsSync(path.join(home, ".claude", "plugins", "claude-code-zh-cn", "manifest.json")), true);
 });
 
-test("install.sh update-only still works when archived without install-json-helper", () => {
+test("install.sh update-only still works when archived without install-json-helper", { skip: unixOnly }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-node-only-install-fallback-"));
   const source = path.join(tmp, "source");
   const home = path.join(tmp, "home");
@@ -100,7 +101,7 @@ test("install.sh update-only still works when archived without install-json-help
   assert.equal(fs.existsSync(path.join(pluginRoot, "manifest.json")), true);
 });
 
-test("install.sh syncs CC Switch common config only with consent", { skip: hasSqlite3() ? false : "requires sqlite3" }, () => {
+test("install.sh syncs CC Switch common config only with consent", { skip: unixOnly || (hasSqlite3() ? false : "requires sqlite3") }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-node-only-ccswitch-"));
   const home = path.join(tmp, "home");
   const binDir = path.join(tmp, "bin");
@@ -245,7 +246,7 @@ test("install.sh syncs CC Switch common config only with consent", { skip: hasSq
   assert.ok(fs.readdirSync(path.dirname(dbFile)).some((name) => name.startsWith("cc-switch.db.zh-cn-backup.")));
 });
 
-test("install.sh respects stored CC Switch manual choice", { skip: hasSqlite3() ? false : "requires sqlite3" }, () => {
+test("install.sh respects stored CC Switch manual choice", { skip: unixOnly || (hasSqlite3() ? false : "requires sqlite3") }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-node-only-ccswitch-manual-"));
   const home = path.join(tmp, "home");
   const binDir = path.join(tmp, "bin");
@@ -292,7 +293,7 @@ test("install.sh respects stored CC Switch manual choice", { skip: hasSqlite3() 
   );
 });
 
-test("uninstall.sh removes zh-cn settings without python3 or jq", () => {
+test("uninstall.sh removes zh-cn settings without python3 or jq", { skip: unixOnly }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-node-only-uninstall-"));
   const home = path.join(tmp, "home");
   const binDir = path.join(tmp, "bin");
@@ -380,7 +381,7 @@ test("uninstall.sh removes zh-cn settings without python3 or jq", () => {
   assert.equal(settings.theme, "dark");
 });
 
-test("uninstall.sh jq fallback removes plugin registrations and hooks", { skip: hasCommand("jq") ? false : "requires jq" }, () => {
+test("uninstall.sh jq fallback removes plugin registrations and hooks", { skip: unixOnly || (hasCommand("jq") ? false : "requires jq") }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-jq-uninstall-"));
   const home = path.join(tmp, "home");
   const binDir = path.join(tmp, "bin");
@@ -466,7 +467,7 @@ test("uninstall.sh jq fallback removes plugin registrations and hooks", { skip: 
   assert.equal(settings.theme, "dark");
 });
 
-test("uninstall.sh keeps custom launcher files without the zh-cn marker", () => {
+test("uninstall.sh keeps custom launcher files without the zh-cn marker", { skip: unixOnly }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-node-only-custom-launcher-"));
   const home = path.join(tmp, "home");
   const binDir = path.join(tmp, "bin");
@@ -494,7 +495,7 @@ test("uninstall.sh keeps custom launcher files without the zh-cn marker", () => 
   assert.match(result.stdout, /检测到自定义 launcher，未自动删除/);
 });
 
-test("notification hook translates messages without python3", () => {
+test("notification hook translates messages without python3", { skip: unixOnly }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-node-only-notification-"));
   const binDir = path.join(tmp, "bin");
 

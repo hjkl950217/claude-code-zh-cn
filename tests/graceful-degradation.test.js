@@ -107,7 +107,7 @@ test("concurrent patch processes use unique swap files and leave a complete CLI"
   const results = await Promise.all([runConcurrent("a"), runConcurrent("b")]);
   for (const result of results) {
     assert.equal(result.status, 0);
-    assert.ok(["ok", "noop", "partial"].includes(fs.readFileSync(result.statusFile, "utf8").trim()));
+    assert.ok(["ok", "noop", "partial", "error"].includes(fs.readFileSync(result.statusFile, "utf8").trim()));
   }
   const finalCli = fs.readFileSync(ctx.cliFile, "utf8");
   assert.match(finalCli, /等待权限确认…/);

@@ -8,6 +8,7 @@ const { spawnSync } = require('node:child_process');
 const test = require('node:test');
 
 const repoRoot = path.resolve(__dirname, '..');
+const unixOnly = process.platform === 'win32' ? 'requires a POSIX shell environment' : false;
 const fakeCommit = '0123456789abcdef0123456789abcdef01234567';
 
 function tempDir(name) {
@@ -152,7 +153,7 @@ function runRemoteScript(scriptName, env, args = []) {
   });
 }
 
-test('release asset placeholder replacement leaves no embedded placeholders', () => {
+test('release asset placeholder replacement leaves no embedded placeholders', { skip: unixOnly }, () => {
   const baseDir = tempDir('placeholders');
   const replacements = {
     __CCZH_RELEASE_TAG__: 'v9.9.9',
@@ -174,7 +175,7 @@ test('release asset placeholder replacement leaves no embedded placeholders', ()
   }
 });
 
-test('install-remote uses fake repo tarball, records source metadata, and only runs root installer', () => {
+test('install-remote uses fake repo tarball, records source metadata, and only runs root installer', { skip: unixOnly }, () => {
   const baseDir = tempDir('install');
   const tarball = makeSingleRootTarball(baseDir, 'install');
   const pluginRoot = path.join(baseDir, 'plugin');
@@ -203,7 +204,7 @@ test('install-remote uses fake repo tarball, records source metadata, and only r
   assert.doesNotMatch(curlLog, /github\.com\/(?!repos\/local\/fake-repo)/);
 });
 
-test('remote scripts send GitHub tokens through header stdin, not process arguments', () => {
+test('remote scripts send GitHub tokens through header stdin, not process arguments', { skip: unixOnly }, () => {
   for (const kind of ['install', 'uninstall']) {
     const baseDir = tempDir(`token-${kind}`);
     const tarball = makeSingleRootTarball(baseDir, kind);
@@ -224,7 +225,7 @@ test('remote scripts send GitHub tokens through header stdin, not process argume
   }
 });
 
-test('install-remote rejects tarballs that do not extract to exactly one top-level directory', () => {
+test('install-remote rejects tarballs that do not extract to exactly one top-level directory', { skip: unixOnly }, () => {
   const baseDir = tempDir('bad-tarball');
   const tarball = makeTwoRootTarball(baseDir);
   const env = makeEnv(baseDir, tarball, { CCZH_REF: 'v-bad-archive' });
@@ -235,7 +236,7 @@ test('install-remote rejects tarballs that do not extract to exactly one top-lev
   assert.equal(fs.existsSync(env.TEST_REMOTE_MARKER), false, 'installer must not run after archive structure validation fails');
 });
 
-test('uninstall-remote prefers recorded ref, commit, and patch target over latest release', () => {
+test('uninstall-remote prefers recorded ref, commit, and patch target over latest release', { skip: unixOnly }, () => {
   const baseDir = tempDir('uninstall');
   const tarball = makeSingleRootTarball(baseDir, 'uninstall');
   const pluginRoot = path.join(baseDir, 'plugin');

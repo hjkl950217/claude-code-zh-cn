@@ -1,4 +1,4 @@
-const test = require("node:test");
+const nodeTest = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -7,9 +7,26 @@ const crypto = require("node:crypto");
 const { execFileSync, spawn, spawnSync } = require("node:child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
+const unixOnly = process.platform === "win32" ? "requires a POSIX shell environment" : false;
 const hookPath = path.join(repoRoot, "plugin", "hooks", "session-start");
 const nativeSupport = require(path.join(repoRoot, "scripts", "upstream-compat.config.json")).support
   .macosNativeExperimental;
+
+const windowsSafeTests = new Set([
+  "Windows session-start hook repairs settings from cached overlay",
+  "Windows session-start hook writes spinner tips to CLAUDE_CONFIG_DIR",
+  "Windows session-start hook never rewrites the running native exe and records a safe manual handoff",
+  "Unix session-start serializes native and npm patch transactions",
+  "session-start context protects machine-readable configuration",
+  "session-start bounds update checks and never runs a standalone installer mid-session",
+  "skill-i18n 默认禁用，需 ZH_CN_SKILL_I18N_ENABLE=1 才触发，HOOK=1 防递归（review #1/#3）",
+  "skill-i18n 超时用 kill -- -PID 杀进程组，subshell+node+claude 孙子都停（review）",
+]);
+const test = (name, options, fn) => {
+  const skip = unixOnly && !windowsSafeTests.has(name) ? unixOnly : false;
+  if (typeof options === "function") return nodeTest(name, { skip }, options);
+  return nodeTest(name, { ...options, skip: options.skip || skip }, fn);
+};
 
 function bumpPatch(version, amount) {
   const parts = String(version).split(".").map((part) => Number.parseInt(part, 10));
@@ -312,6 +329,68 @@ test("Windows session-start hook repairs settings from cached overlay", () => {
   assert.match(script, /fs\.writeFileSync\(settingsFile/);
   assert.match(script, /Repair-SettingsFromCache/);
 });
+
+test(
+  "Windows session-start hook writes spinner tips to CLAUDE_CONFIG_DIR",
+  { skip: process.platform !== "win32" ? "requires Windows PowerShell" : false },
+  () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-config-dir-"));
+  const pluginRoot = path.join(tmp, "plugin");
+  const configDir = path.join(tmp, "config");
+  const wrongHome = path.join(tmp, "wrong-home");
+  const settingsFile = path.join(configDir, "settings.json");
+
+  try {
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(settingsFile, "{}\n");
+    const overlay = JSON.stringify({
+      language: "Chinese",
+      spinnerTipsEnabled: true,
+      spinnerTipsOverride: {
+        excludeDefault: true,
+        tips: ["使用 /permissions 预先批准或拒绝 bash、编辑和 MCP 工具"],
+      },
+    }) + "\n";
+    // Windows PowerShell 写出的 JSON 可能带 UTF-8 BOM，Hook 必须仍可读取缓存。
+    fs.writeFileSync(path.join(pluginRoot, ".settings-overlay-cache.json"), `﻿${overlay}`);
+
+    const result = spawnSync(
+      "pwsh.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(repoRoot, "plugin", "hooks", "session-start.ps1")],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          USERPROFILE: wrongHome,
+          CLAUDE_CONFIG_DIR: configDir,
+          CLAUDE_PLUGIN_ROOT: pluginRoot,
+          ZH_CN_DISABLE_AUTO_UPDATE: "1",
+        },
+      }
+    );
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(
+      fs.existsSync(settingsFile),
+      true,
+      `Hook did not write ${settingsFile}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`
+    );
+    const settings = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
+    assert.deepEqual(
+      settings.spinnerTipsOverride,
+      {
+        excludeDefault: true,
+        tips: ["使用 /permissions 预先批准或拒绝 bash、编辑和 MCP 工具"],
+      },
+      `settings: ${JSON.stringify(settings)}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+  }
+);
 
 test("pure marketplace install (no cache) self-seeds spinner settings from bundled data", () => {
   // 纯 `claude plugin install` 安装：没有 install 脚本预生成 .settings-overlay-cache.json。

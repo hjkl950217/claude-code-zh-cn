@@ -89,11 +89,18 @@ function createFixtureRepo({
 
 function createFakeGh(tmp) {
   const bin = path.join(tmp, "bin");
-  const gh = path.join(bin, "gh");
+  const gh = path.join(bin, process.platform === "win32" ? "gh.cmd" : "gh");
   fs.mkdirSync(bin, { recursive: true });
-  fs.writeFileSync(
-    gh,
-    `#!/usr/bin/env node
+
+  if (process.platform === "win32") {
+    fs.writeFileSync(
+      gh,
+      "@echo off\r\nnode -e \"const [scope, command, tag] = process.argv.slice(1); const releases = new Set((process.env.FAKE_GH_RELEASE_TAGS || '').split(',').filter(Boolean)); if (scope !== 'release' || command !== 'view' || !tag) { console.error('unexpected gh arguments'); process.exit(2); } if (!releases.has(tag)) { console.error('release not found'); process.exit(1); } process.stdout.write(JSON.stringify({ tagName: tag, url: 'https://example.test/releases/' + tag }) + '\\n');\" %*\r\n"
+    );
+  } else {
+    fs.writeFileSync(
+      gh,
+      `#!/usr/bin/env node
 const [scope, command, tag] = process.argv.slice(2);
 const releases = new Set((process.env.FAKE_GH_RELEASE_TAGS || "").split(",").filter(Boolean));
 if (scope !== "release" || command !== "view" || !tag) {
@@ -106,18 +113,20 @@ if (!releases.has(tag)) {
 }
 process.stdout.write(JSON.stringify({ tagName: tag, url: "https://example.test/releases/" + tag }) + "\\n");
 `
-  );
-  fs.chmodSync(gh, 0o755);
-  return bin;
+    );
+    fs.chmodSync(gh, 0o755);
+  }
+
+  return gh;
 }
 
 function runReleaseState(repo, env = {}) {
-  const fakeGhBin = createFakeGh(repo);
-  return spawnSync("node", [releaseStateScript, "--repo-root", repo], {
+  const fakeGh = createFakeGh(repo);
+  return spawnSync(process.execPath, [releaseStateScript, "--repo-root", repo, "--github-repo", "example/test-repo"], {
     cwd: repoRoot,
     env: {
       ...process.env,
-      PATH: `${fakeGhBin}:${process.env.PATH}`,
+      CCZH_GH_COMMAND: fakeGh,
       ...env,
     },
     encoding: "utf8",
@@ -125,7 +134,7 @@ function runReleaseState(repo, env = {}) {
 }
 
 function runReleaseStateWithoutFakeGh(repo, env = {}) {
-  return spawnSync("node", [releaseStateScript, "--repo-root", repo], {
+  return spawnSync(process.execPath, [releaseStateScript, "--repo-root", repo, "--github-repo", "example/test-repo"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -141,7 +150,6 @@ test("verify-release-state passes when manifest and changelog version have a tag
     changelogVersion: "1.2.3",
     tagVersion: "1.2.3",
   });
-
   const result = runReleaseState(repo, { FAKE_GH_RELEASE_TAGS: "v1.2.3" });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -222,16 +230,23 @@ test("verify-release-state reports GitHub lookup errors separately from missing 
     tagVersion: "1.2.3",
   });
   const bin = path.join(repo, "broken-gh-bin");
-  const gh = path.join(bin, "gh");
+  const gh = path.join(bin, process.platform === "win32" ? "gh.cmd" : "gh");
   fs.mkdirSync(bin, { recursive: true });
-  fs.writeFileSync(
-    gh,
-    "#!/usr/bin/env bash\nprintf 'Get \"https://api.github.com/repos/o/r/releases/tags/v1.2.3\": net/http: TLS handshake timeout\\n' >&2\nexit 1\n"
-  );
-  fs.chmodSync(gh, 0o755);
+  if (process.platform === "win32") {
+    fs.writeFileSync(
+      gh,
+      "@echo off\r\necho Get \"https://api.github.com/repos/o/r/releases/tags/v1.2.3\": net/http: TLS handshake timeout 1>&2\r\nexit /b 1\r\n"
+    );
+  } else {
+    fs.writeFileSync(
+      gh,
+      "#!/usr/bin/env bash\nprintf 'Get \"https://api.github.com/repos/o/r/releases/tags/v1.2.3\": net/http: TLS handshake timeout\\n' >&2\nexit 1\n"
+    );
+    fs.chmodSync(gh, 0o755);
+  }
 
   const result = runReleaseStateWithoutFakeGh(repo, {
-    PATH: `${bin}:${process.env.PATH}`,
+    CCZH_GH_COMMAND: gh,
   });
 
   assert.equal(result.status, 2, "transport failures should make release-state inconclusive");

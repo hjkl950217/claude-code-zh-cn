@@ -8,6 +8,7 @@ const { spawnSync } = require('node:child_process');
 const test = require('node:test');
 
 const repoRoot = path.resolve(__dirname, '..');
+const unixOnly = process.platform === 'win32' ? 'requires a POSIX shell environment' : false;
 const sessionStart = path.join(repoRoot, 'plugin', 'hooks', 'session-start');
 
 function tempDir(name) {
@@ -96,7 +97,7 @@ function runSessionStart(env) {
   });
 }
 
-test('SessionStart announces a remote release without replacing a standalone install', () => {
+test('SessionStart announces a remote release without replacing a standalone install', { skip: unixOnly }, () => {
   const baseDir = tempDir('slug');
   const pluginRoot = makePluginRoot(baseDir, 'local/fake-repo');
   const env = makeEnv(baseDir, pluginRoot);
@@ -113,7 +114,7 @@ test('SessionStart announces a remote release without replacing a standalone ins
   assert.match(result.stdout, /检测到插件 v2\.0\.0.*本次未自动安装/);
 });
 
-test('SessionStart keeps unsupported .source-repo values out of remote auto-update', () => {
+test('SessionStart keeps unsupported .source-repo values out of remote auto-update', { skip: unixOnly }, () => {
   const baseDir = tempDir('unsupported-source');
   const pluginRoot = makePluginRoot(baseDir, 'not a repo slug');
   const env = makeEnv(baseDir, pluginRoot);

@@ -115,15 +115,37 @@ function checkGitTag(repoRoot, tagName) {
   };
 }
 
-function checkGitHubRelease(repoRoot, tagName, githubRepo) {
-  const args = ["release", "view", tagName, "--json", "tagName,url"];
-  if (githubRepo) {
-    args.push("--repo", githubRepo);
-  }
-
-  const result = spawnSync("gh", args, {
+function resolveGitHubRepo(repoRoot) {
+  const result = spawnSync("git", ["remote", "get-url", "origin"], {
     cwd: repoRoot,
     encoding: "utf8",
+  });
+  if (result.status !== 0) return null;
+
+  const url = result.stdout.trim();
+  const match = url.match(/(?:github\.com[/:])([^/\s]+)\/([^/\s]+?)(?:\.git)?$/i);
+  return match ? `${match[1]}/${match[2]}` : null;
+}
+
+function checkGitHubRelease(repoRoot, tagName, githubRepo) {
+  const args = ["release", "view", tagName, "--json", "tagName,url"];
+  const resolvedRepo = githubRepo || resolveGitHubRepo(repoRoot);
+
+  if (!resolvedRepo) {
+    return {
+      ok: false,
+      state: "missing",
+      detail: "no git remotes found",
+    };
+  }
+
+  args.push("--repo", resolvedRepo);
+
+  const ghCommand = process.env.CCZH_GH_COMMAND || "gh";
+  const result = spawnSync(ghCommand, args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    shell: process.platform === "win32" && Boolean(process.env.CCZH_GH_COMMAND),
     env: {
       ...process.env,
       GH_NO_UPDATE_NOTIFIER: "1",
