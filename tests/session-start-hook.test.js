@@ -330,7 +330,10 @@ test("Windows session-start hook repairs settings from cached overlay", () => {
   assert.match(script, /Repair-SettingsFromCache/);
 });
 
-test("Windows session-start hook writes spinner tips to CLAUDE_CONFIG_DIR", () => {
+test(
+  "Windows session-start hook writes spinner tips to CLAUDE_CONFIG_DIR",
+  { skip: process.platform !== "win32" ? "requires Windows PowerShell" : false },
+  () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cczh-config-dir-"));
   const pluginRoot = path.join(tmp, "plugin");
   const configDir = path.join(tmp, "config");
@@ -386,7 +389,8 @@ test("Windows session-start hook writes spinner tips to CLAUDE_CONFIG_DIR", () =
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
-});
+  }
+);
 
 test("pure marketplace install (no cache) self-seeds spinner settings from bundled data", () => {
   // 纯 `claude plugin install` 安装：没有 install 脚本预生成 .settings-overlay-cache.json。

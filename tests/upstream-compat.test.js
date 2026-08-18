@@ -251,6 +251,12 @@ test("verify-upstream-compat catches PR #10-style high-risk text regressions", (
   assert.deepEqual(risk.missingRequired, [
     {
       kind: "upstream-text",
+      id: "advisor_prompt_tool_name",
+      rule: "preserve",
+      match: "# Advisor Tool\n\nYou have access to an \\`advisor\\` tool",
+    },
+    {
+      kind: "upstream-text",
       id: "advisor_dialog_title",
       rule: "preserve",
       match: "title:\"Advisor Tool\"",
