@@ -203,13 +203,66 @@ function syncCcSwitch(dbFile, overlay) {
 
 // ---- patch 状态报告 ----
 
-function reportPatchStatus(pluginRoot, platform = process.platform) {
+function installerSourceCandidates(pluginRoot, home = homeDir()) {
+  const candidates = [];
+  let current = path.resolve(pluginRoot);
+  for (let depth = 0; depth < 6; depth += 1) {
+    candidates.push(current);
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+
+  const pluginsRoot = path.join(home, ".claude", "plugins");
+  const knownMarketplaces = readJson(path.join(pluginsRoot, "known_marketplaces.json"), {});
+  for (const [name, marketplace] of Object.entries(knownMarketplaces)) {
+    const repo = marketplace?.source?.repo;
+    const isZhCnMarketplace =
+      name === "claude-code-zh-cn" ||
+      name === "taekchef" ||
+      (typeof repo === "string" && repo.toLowerCase().endsWith("/claude-code-zh-cn"));
+    const configured = marketplace?.installLocation;
+    if (isZhCnMarketplace && typeof configured === "string" && configured.trim()) {
+      candidates.push(configured);
+    }
+  }
+  candidates.push(path.join(pluginsRoot, "marketplaces", "claude-code-zh-cn"));
+  candidates.push(path.join(pluginsRoot, "marketplaces", "taekchef"));
+
+  return [...new Set(candidates.map((candidate) => path.resolve(candidate)))];
+}
+
+function resolveInstallerEntry(pluginRoot, platform = process.platform, home = homeDir()) {
+  const isWindows = platform === "win32";
+  const installer = isWindows ? "install.ps1" : "install.sh";
+  const payload = isWindows ? path.join("plugin", "patch-cli.js") : path.join("plugin", "patch-cli.sh");
+
+  for (const sourceRoot of installerSourceCandidates(pluginRoot, home)) {
+    const entry = path.join(sourceRoot, installer);
+    if (fs.existsSync(entry) && fs.existsSync(path.join(sourceRoot, payload))) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+function quotePowerShellArgument(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function quotePosixArgument(value) {
+  return "'" + String(value).replace(/'/g, "'\\''") + "'";
+}
+
+function reportPatchStatus(pluginRoot, platform = process.platform, options = {}) {
   // session-start hook 把 patch marker 写在 STATE_ROOT/.patched-version
   // 这里只做只读提示，不手动 patch
   const stateRoot = process.env.CLAUDE_PLUGIN_DATA || process.env.CLAUDE_PLUGIN_ROOT || pluginRoot;
   const markerFile = path.join(stateRoot, ".patched-version");
   const marker = fs.existsSync(markerFile) ? fs.readFileSync(markerFile, "utf8").trim() : "";
   const isWindows = platform === "win32";
+  const home = options.home || homeDir();
+  const installerEntry = resolveInstallerEntry(pluginRoot, platform, home);
 
   const lines = [];
   if (marker) {
@@ -230,11 +283,22 @@ function reportPatchStatus(pluginRoot, platform = process.platform) {
   }
   lines.push("");
   if (isWindows) {
-    lines.push("如界面仍为英文（Windows）：请完全退出所有 Claude Code 窗口，然后在插件源码目录运行：");
-    lines.push('  powershell -ExecutionPolicy Bypass -File install.ps1 -UpdateOnly');
-    lines.push("（若当前 setup.js 从插件缓存包运行，缓存包不含 install.ps1，请从 marketplace 源码目录执行上面的命令）");
+    lines.push("如界面仍为英文（Windows）：请完全退出所有 Claude Code 窗口，然后运行：");
+    if (installerEntry) {
+      lines.push(`  powershell -NoProfile -ExecutionPolicy Bypass -File ${quotePowerShellArgument(installerEntry)} -UpdateOnly`);
+    } else {
+      const cloneRoot = path.join(home, "claude-code-zh-cn");
+      lines.push("! 未找到包含 install.ps1 的 marketplace 源码目录。");
+      lines.push("  请先获取完整源码，再运行安装入口（以下命令只下载，不自动执行远程脚本）：");
+      lines.push(`  git clone https://github.com/taekchef/claude-code-zh-cn.git ${quotePowerShellArgument(cloneRoot)}`);
+      lines.push(`  powershell -NoProfile -ExecutionPolicy Bypass -File ${quotePowerShellArgument(path.join(cloneRoot, "install.ps1"))} -UpdateOnly`);
+    }
   } else {
     lines.push("如界面仍为英文，请完全退出所有 Claude Code 窗口后重新打开（让 hook 重新 patch）。");
+    if (installerEntry) {
+      lines.push("如 hook 仍无法修复，可运行完整源码中的安装入口：");
+      lines.push(`  bash ${quotePosixArgument(installerEntry)} --update-only`);
+    }
   }
   return lines.join("\n");
 }
@@ -379,6 +443,7 @@ module.exports = {
   ccSwitchConfigStatus,
   syncCcSwitch,
   reportPatchStatus,
+  resolveInstallerEntry,
   reportSkillTranslation,
   reportCcSwitchSkillDescriptions,
   settingsFile,
