@@ -1232,9 +1232,10 @@ function installStatusbarToolActivityLocalization() {
         (_m, count) => `${count}===1?"个 Hook":"个 Hook"`
     );
     // memo 分支 "Ran " 字面量（children:[...,"Ran ",count," ",hookLabel," ",noun,""]）
+    // 词序纠正：输出 "已运行 <count> 个 <hookLabel> Hook"（防止出现 "已运行 1 stop 个 Hook" 的错误顺序）
     tryRegexReplace(
         /"Ran ",([A-Za-z0-9_$]+)," ",([A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)?)," ",([A-Za-z0-9_$]+),""/g,
-        (_m, count, label, noun) => `"已运行 ",${count}," ",${label}," ",${noun},""`
+        (_m, count, label) => `"已运行 ",${count}," 个 ",${label}," Hook",""`
     );
 }
 
@@ -1384,6 +1385,112 @@ function installCli233ResidualUILocalization() {
     tryReplace(
         ',mKw={review:"",blocked:"Sessions that have a question or need your decision land here",working:"Sessions Claude is actively working on \\u2014 they keep running even if you close the terminal",done:"Finished sessions wait here for you to review"}',
         ',mKw={review:"",blocked:"需要你决策的会话会出现在这里",working:"Claude 正在积极处理的会话 \\u2014 关闭终端后仍在运行",done:"已完成的会话留在这里等待你查看"}'
+    );
+
+    // 12. resume 提示（resumeHint 写入 stdout 的模板；保留 claude --resume/--worktree 命令形态）
+    // cli.js 中该模板的换行可能是真实换行 U+000A（JSON.stringify 显示为 \n）或字面 `\n`
+    // （反斜杠+n 两字符），两种形态都匹配。
+    tryRegexReplace(
+        /`(\n|\\n)Resume this session with:(\n|\\n)claude \$\{([^}]+)\}--resume \$\{([^}]+)\}(\n|\\n)`/g,
+        (_m, _a, _b, o, r, _c) => `\`\\n请使用以下命令继续会话：\\nclaude \${${o}}--resume \${${r}}\\n\``
+    );
+
+    // 13. /rewind 回滚提示的多段 push 数组（保留 --- 分隔线、/rewind 命令名与 ${e.ref} 变量）
+    tryReplace(
+        '"Don\'t want these changes? Resume this session (above), then run"',
+        '"不想保留这些更改？请在上方恢复会话，然后运行"'
+    );
+    tryReplace(
+        '"`/rewind` to roll back the turn\'s tool edits (bash-made changes"',
+        '"`/rewind` 回滚本次回合的工具编辑（bash 产生的更改"'
+    );
+    tryReplace(
+        "`excluded). ${e.ref} holds a full snapshot until this session's`",
+        "`（已排除）。${e.ref} 存储了完整快照，直到本次会话的`"
+    );
+    tryReplace(
+        '"next checkpoint, or for up to ~2 weeks."',
+        '"下一个检查点，或最长约 2 周。"'
+    );
+
+    // 14. remote-control 恢复/环境保留提示（保留 claude remote-control、--continue、--session-id 命令形态）
+    tryRegexReplace(
+        /`Resume this session by running \\`claude remote-control \$\{e\.ownsPointer\?"--continue":`--session-id \$\{l\}`\}\\\``/g,
+        () => '`请运行 \\`claude remote-control ${e.ownsPointer?"--continue":`--session-id ${l}`}\\` 恢复本会话`'
+    );
+    tryReplace(
+        '"Environment preserved. Restart `claude remote-control` to reconnect existing sessions."',
+        '"环境已保留。请重新启动 `claude remote-control` 以重新连接现有会话。"'
+    );
+
+    // 15. auto_mode_pregather 上下文标签（显示在 context 标签中）
+    tryReplace(
+        '"CLAUDE.md files and project docs"',
+        '"CLAUDE.md 文件与项目文档"'
+    );
+    tryReplace(
+        '"Repo facts"',
+        '"仓库事实"'
+    );
+    tryReplace(
+        '"Existing auto-mode settings (selective read)"',
+        '"现有自动模式设置（选择性读取）"'
+    );
+    tryReplace(
+        '"Recent usage in this project (names only)"',
+        '"此项目的最近使用情况（仅名称）"'
+    );
+    tryReplace(
+        '"Config scans (names only)"',
+        '"配置扫描（仅名称）"'
+    );
+    tryReplace(
+        '"Shipped default auto-mode rule labels"',
+        '"随附的默认自动模式规则标签"'
+    );
+
+    // 16. hook 配置 schema 描述（/hooks 配置帮助文本）
+    tryReplace(
+        '"Custom status message to display in spinner while hook runs"',
+        '"Hook 运行时在 spinner 显示的自定义状态消息"'
+    );
+    tryReplace(
+        '"If true, hook runs once and is removed after execution"',
+        '"若为 true，Hook 只运行一次，执行后即移除"'
+    );
+
+    // 17. 新功能公告标题与遥测确认文案
+    tryReplace(
+        '"Feature of the week:"',
+        '"本周功能："'
+    );
+    tryReplace(
+        '"Help improve our AI models "',
+        '"帮助改进我们的 AI 模型 "'
+    );
+
+    // 18. memory 保存说明标题
+    tryReplace(
+        '"Saving a memory is a two-step process:"',
+        '"保存记忆分为两步："'
+    );
+
+    // 19. 遥测开关相关（无尾空格标题、隐私选项 label、日志；\xB7 为源码字面转义）
+    tryReplace(
+        '"Help improve our AI models"',
+        '"帮助改进我们的 AI 模型"'
+    );
+    tryReplace(
+        '"Accept terms \\xB7 Help improve our AI models: ON"',
+        '"接受条款 \\xB7 帮助改进我们的 AI 模型：开"'
+    );
+    tryReplace(
+        '"Accept terms \\xB7 Help improve our AI models: OFF"',
+        '"接受条款 \\xB7 帮助改进我们的 AI 模型：关"'
+    );
+    tryReplace(
+        '"Accept terms \\xB7 Help improve our AI models: OFF (for emails with your domain)"',
+        '"接受条款 \\xB7 帮助改进我们的 AI 模型：关（针对你域名的邮件）"'
     );
 }
 
