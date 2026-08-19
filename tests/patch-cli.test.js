@@ -1163,3 +1163,196 @@ test("builtin /config command descriptions are localized", () => {
   assert.match(patched, /显示哪些已加载的 skill/);
   assert.match(patched, /报告问题或分享你的对话/);
 });
+
+test("Path contains null bytes error stays distinct from the makeErrorWithCode API", () => {
+  const patched = patchFixture([
+    'if(e.includes("\\x00")||r.includes("\\x00"))throw Error("Path contains null bytes");',
+    'const x=KZ(121,"path","string without null bytes",filename);',
+    "",
+  ]);
+
+  assert.equal(patched.includes("Path contains null bytes"), false, patched);
+  assert.match(patched, /throw Error\("路径包含空字节"\)/);
+  assert.equal(patched.includes("string without null bytes"), true, patched);
+  assert.equal(patched.includes('"\\x00"'), true, patched);
+});
+
+test("interrupted turn keeps localized prefix and translates the question suffix", () => {
+  const patched = patchFixture([
+    'Q4e.jsx(_,{dimColor:!0,children:"已中断 "}),Q4e.jsx(_,{dimColor:!0,children:"\\xB7 What should Claude do instead?"})',
+    "",
+  ]);
+
+  assert.equal(patched.includes("What should Claude do instead?"), false, patched);
+  assert.equal(patched.includes('children:"已中断 "'), true, patched);
+  assert.equal(patched.includes('children:"\\xB7 Claude 应该怎么做？"'), true, patched);
+});
+
+test("model picker fallback string is localized while preserving --model option", () => {
+  const patched = patchFixture([
+    'const BXm=l3P??"Switch between Claude models. Your pick becomes the default for new sessions. For other/previous model names, specify with --model.";',
+    "",
+  ]);
+
+  assert.equal(patched.includes("Switch between Claude models."), false, patched);
+  assert.equal(patched.includes("For other/previous model names"), false, patched);
+  assert.match(patched, /切换 Claude 模型。/);
+  assert.match(patched, /--model/);
+});
+
+test("stop hook block cap warning is localized while keeping API identifiers", () => {
+  const patched = patchFixture([
+    'yield Cl(`A hook blocked the turn from ending ${oa} consecutive times \\u2014 overriding and ending turn. `+"For Stop/SubagentStop hooks, check stop_hook_active in the input and return success while it\'s true. Set CLAUDE_CODE_STOP_HOOK_BLOCK_CAP to raise this limit.","warning")',
+    "",
+  ]);
+
+  for (const residue of [
+    "A hook blocked the turn from ending",
+    "consecutive times",
+    "overriding and ending turn",
+    "For Stop/SubagentStop hooks",
+    "check stop_hook_active in the input",
+    "Set CLAUDE_CODE_STOP_HOOK_BLOCK_CAP to raise this limit",
+  ]) {
+    assert.equal(patched.includes(residue), false, `raw residue remained: ${residue}\n${patched}`);
+  }
+  assert.match(patched, /一个 Hook 已连续 \$\{oa\} 次阻止回合结束 \\u2014 正在覆盖并结束回合。 /);
+  assert.match(patched, /stop_hook_active/);
+  assert.match(patched, /CLAUDE_CODE_STOP_HOOK_BLOCK_CAP/);
+});
+
+test("context bar states are localized while preserving dynamic percentages", () => {
+  const patched = patchFixture([
+    'let NCw=LCw?`${100-wzh}% context used`:`${wzh}% until auto-compact`;',
+    'if(jMM){const X_t=psc?`${NCw} \\xB7 ${psc}`:NCw;}',
+    'let zMM=F5e!==void 0||q.DISABLE_COMPACT;',
+    'const X_t=psc?`Context low (${dsc}% remaining) \\xB7 ${psc}`:zMM?`Context low (${dsc}% remaining)`:`Context low (${dsc}% remaining) \\xB7 Run /compact to compact & continue`;',
+    "",
+  ]);
+
+  for (const residue of [
+    "% context used",
+    "% until auto-compact",
+    "Context low",
+    "Run /compact to compact & continue",
+  ]) {
+    assert.equal(patched.includes(residue), false, `raw residue remained: ${residue}\n${patched}`);
+  }
+  assert.match(patched, /\$\{100-wzh\}% 上下文已使用/);
+  assert.match(patched, /\$\{wzh\}% 后自动压缩/);
+  assert.match(patched, /上下文不足（剩余 \$\{dsc\}%）/);
+  assert.match(patched, /\\xB7 运行 \/compact 压缩并继续/);
+  assert.match(patched, /\\xB7 \$\{psc\}/);
+  for (const token of ["\\xB7 ${psc}", "${dsc}", "/compact"]) {
+    assert.equal(patched.includes(token), true, `protected token changed: ${token}\n${patched}`);
+  }
+});
+
+test("thinking status verb function is localized while preserving thresholds", () => {
+  const patched = patchFixture([
+    'function BYS(e){if(e>=FYS)return"almost done thinking";if(e>=$YS)return"thinking some more";if(e>=NYS)return"thinking more";if(e>=LYS)return"still thinking";return"thinking"}',
+    "",
+  ]);
+
+  for (const residue of [
+    "almost done thinking",
+    "thinking some more",
+    "thinking more",
+    "still thinking",
+    'return"thinking"',
+  ]) {
+    assert.equal(patched.includes(residue), false, `raw residue remained: ${residue}\n${patched}`);
+  }
+  assert.match(patched, /"即将完成思考"/);
+  assert.match(patched, /"继续思考中"/);
+  assert.match(patched, /仍在思考/);
+  assert.match(patched, /"思考中"/);
+  assert.match(patched, /function BYS/);
+});
+
+test("effort suffix template localizes around the raw effort level value", () => {
+  const patched = patchFixture([
+    'function VTt(e,t){if(t===void 0)return"";let r=Jne(e,t);if(r===void 0)return"";return` with ${gge(D2e(r))} effort`}',
+    "",
+  ]);
+
+  assert.equal(patched.includes("with ${gge(D2e(r))} effort"), false, patched);
+  assert.match(patched, /`（思考强度 \$\{gge\(D2e\(r\)\)\}）`/);
+  assert.equal(patched.includes("gge(D2e(r))"), true, patched);
+});
+
+test("tool-running activity templates localize durations and suffixes", () => {
+  const patched = patchFixture([
+    'switch(M.kind){case"tool-running":Ie=`running tool for ${la(M.toolMs)}`;break;case"tool-done":Ie=`ran tool for ${la(M.toolMs)}`;break;case"thinking":Ie=`${Ae}${h}`;break;case"thought-for":Ie=`thought for ${Math.max(1,Math.round(M.thoughtMs/1000))}s`;break;case"none":Ie=null;break}',
+    "",
+  ]);
+
+  for (const residue of [
+    "running tool for",
+    "ran tool for",
+    "thought for",
+  ]) {
+    assert.equal(patched.includes(residue), false, `raw residue remained: ${residue}\n${patched}`);
+  }
+  assert.match(patched, /case"tool-running":Ie=`正在运行工具，已用 \$\{la\(M\.toolMs\)\}`/);
+  assert.match(patched, /case"tool-done":Ie=`已完成工具，用时 \$\{la\(M\.toolMs\)\}`/);
+  assert.match(patched, /case"thought-for":Ie=`已思考 \$\{Math\.max\(1,Math\.round\(M\.thoughtMs\/1000\)\)\} 秒`/);
+  assert.equal(patched.includes('case"thinking":Ie=`${Ae}${h}`;'), true, patched);
+  assert.equal(patched.includes('case"none":Ie=null;'), true, patched);
+});
+
+test("remoting banner connecting/reconnecting copy is localized", () => {
+  const patched = patchFixture([
+    'if(a)z+=Xt.dim(" \\xB7 ")+Xt.dim(a);if(l)z+=Xt.dim(" \\xB7 ")+Xt.dim(l);I(`${Xt.yellow(Y)} ${Xt.yellow("Connecting")}${z}',
+    'function K(Y,z){if(m)for(let X of f)I(`${Xt.dim(X)}',
+    'let W=Mhn[C%Mhn.length];C++,I(`${Xt.yellow(W)} ${Xt.yellow("Reconnecting")} ${Xt.dim("\\xB7")} ${Xt.dim(`retrying in ${Y}`)} ${Xt.dim("\\xB7")} ${Xt.dim(`disconnected ${z}`)}',
+    "",
+  ]);
+
+  for (const residue of ['"Connecting"', '"Reconnecting"', "retrying in ${Y}", "disconnected ${z}"]) {
+    assert.equal(patched.includes(residue), false, `raw residue remained: ${residue}\n${patched}`);
+  }
+  assert.match(patched, /Xt\.yellow\("连接中"\)/);
+  assert.match(patched, /Xt\.yellow\("重新连接"\)/);
+  assert.match(patched, /`\$\{Y\} 后重试`/);
+  assert.match(patched, /`已断开 \$\{z\}`/);
+});
+
+test("remoting ready/connected status values are localized inside their assignments only", () => {
+  const patched = patchFixture([
+    'updateIdleStatus(){V(),o="idle",i="Ready",g=null,y=0,p=null,M(u),Q()}',
+    'setAttached(Y){if(V(),o="attached",i="Connected",g=null,y=0,S<=1)p=oS(Y,d),M(p);Q()}',
+    "",
+  ]);
+
+  assert.equal(patched.includes('i="Ready"'), false, patched);
+  assert.equal(patched.includes('i="Connected"'), false, patched);
+  assert.match(patched, /i="就绪"/);
+  assert.match(patched, /i="已连接"/);
+  assert.match(patched, /o="idle"/);
+  assert.match(patched, /o="attached"/);
+});
+
+test("agent task status display map is localized while keeping the status keys", () => {
+  const patched = patchFixture([
+    'LQi=["review","blocked","working","done"],E4t={review:"Ready for review",blocked:"Needs input",working:"Working",done:"Completed"},',
+    ',mKw={review:"",blocked:"Sessions that have a question or need your decision land here",working:"Sessions Claude is actively working on \\u2014 they keep running even if you close the terminal",done:"Finished sessions wait here for you to review"}',
+    "",
+  ]);
+
+  assert.equal(patched.includes('working:"Working"'), false, patched);
+  assert.equal(patched.includes('blocked:"Needs input"'), false, patched);
+  assert.equal(patched.includes('done:"Completed"'), false, patched);
+  assert.equal(patched.includes("Sessions that have a question or need your decision"), false, patched);
+  assert.equal(patched.includes("Sessions Claude is actively working on"), false, patched);
+  assert.equal(patched.includes("Finished sessions wait here"), false, patched);
+  assert.match(patched, /review:"待审核"/);
+  assert.match(patched, /blocked:"需要输入"/);
+  assert.match(patched, /working:"进行中"/);
+  assert.match(patched, /done:"已完成"/);
+  assert.match(patched, /blocked:"需要你决策的会话会出现在这里"/);
+  assert.match(patched, /working:"Claude 正在积极处理的会话 \\u2014 关闭终端后仍在运行"/);
+  assert.match(patched, /done:"已完成的会话留在这里等待你查看"/);
+  assert.equal(patched.includes('LQi=["review","blocked","working","done"]'), true, patched);
+  assert.equal(patched.includes('review:""'), true, patched);
+});
