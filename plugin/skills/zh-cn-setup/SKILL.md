@@ -58,3 +58,4 @@ node "${CLAUDE_PLUGIN_ROOT}/skills/zh-cn-setup/scripts/cc-switch-descriptions.js
 
 - 如果提示"请重启 Claude Code"：说明 CLI patch 已由 hook 处理，重启后生效
 - 如果提示 CC Switch 同步：把脚本给出的手动步骤或授权命令转给用户
+- 如果提示 Windows 需手动运行 `install.ps1 -UpdateOnly`：确认用户已完全退出所有 Claude Code 窗口后，把脚本输出的两行命令原文转给用户（`Set-Location '<目录>'` + `powershell ... -File .\install.ps1 -UpdateOnly`）。**务必提醒扩展名必须是 `.ps1`**（末尾的 `1` 不能漏），否则 PowerShell 会报 `the file does not have a '.ps1' extension`。

@@ -285,13 +285,19 @@ function reportPatchStatus(pluginRoot, platform = process.platform, options = {}
   if (isWindows) {
     lines.push("如界面仍为英文（Windows）：请完全退出所有 Claude Code 窗口，然后运行：");
     if (installerEntry) {
-      lines.push(`  powershell -NoProfile -ExecutionPolicy Bypass -File ${quotePowerShellArgument(installerEntry)} -UpdateOnly`);
+      // install.ps1 基于 $PSScriptRoot 解析路径，与当前目录无关；
+      // 拆成 Set-Location + .\install.ps1 两行，既便于复制，也避免长路径里扩展名被截断（.ps1 误写为 .ps 会触发 PS 报错）。
+      lines.push(`  Set-Location ${quotePowerShellArgument(path.dirname(installerEntry))}`);
+      lines.push(`  powershell -NoProfile -ExecutionPolicy Bypass -File .\\install.ps1 -UpdateOnly`);
+      lines.push("  注意：-File 指向的必须是 install.ps1（末尾的 1 不能漏），否则 PowerShell 会报「file does not have a '.ps1' extension」。");
     } else {
       const cloneRoot = path.join(home, "claude-code-zh-cn");
       lines.push("! 未找到包含 install.ps1 的 marketplace 源码目录。");
       lines.push("  请先获取完整源码，再运行安装入口（以下命令只下载，不自动执行远程脚本）：");
       lines.push(`  git clone https://github.com/taekchef/claude-code-zh-cn.git ${quotePowerShellArgument(cloneRoot)}`);
-      lines.push(`  powershell -NoProfile -ExecutionPolicy Bypass -File ${quotePowerShellArgument(path.join(cloneRoot, "install.ps1"))} -UpdateOnly`);
+      lines.push(`  Set-Location ${quotePowerShellArgument(cloneRoot)}`);
+      lines.push(`  powershell -NoProfile -ExecutionPolicy Bypass -File .\\install.ps1 -UpdateOnly`);
+      lines.push("  注意：-File 指向的必须是 install.ps1（末尾的 1 不能漏），否则 PowerShell 会报「file does not have a '.ps1' extension」。");
     }
   } else {
     lines.push("如界面仍为英文，请完全退出所有 Claude Code 窗口后重新打开（让 hook 重新 patch）。");
