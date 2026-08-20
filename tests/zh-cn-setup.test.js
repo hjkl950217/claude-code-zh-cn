@@ -12,6 +12,7 @@ const {
   fillMissingKeys,
   reportPatchStatus,
   reportSkillTranslation,
+  resolveInstallerEntry,
 } = require(setupScript);
 
 function makeTmpHome() {
@@ -19,6 +20,12 @@ function makeTmpHome() {
   const home = path.join(tmp, "home");
   fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
   return { tmp, home };
+}
+
+function bashExecutable() {
+  if (process.platform !== "win32") return "bash";
+  const gitExecPath = execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim();
+  return path.resolve(gitExecPath, "..", "..", "..", "bin", "bash.exe");
 }
 
 function runSetup(home, pluginRoot, env = {}) {
@@ -162,8 +169,92 @@ test("reportPatchStatus guides Windows native when marker missing", () => {
     assert.match(out, /暂未检测到 CLI patch 标记/);
     assert.match(out, /手动触发/);
     assert.match(out, /install\.ps1 -UpdateOnly/);
-    assert.match(out, /缓存包不含 install\.ps1/);
+    // 命令拆成 Set-Location + 相对 .\install.ps1 两行：长路径不再挤在一行里，
+    // 复制时不会把结尾的扩展名截断成 .ps。install.ps1 用 $PSScriptRoot 解析路径，
+    // 与当前目录无关，所以先 Set-Location 再相对调用是安全的。
+    assert.match(out, /Set-Location '[^']*[\\/][^']*'/);
+    assert.doesNotMatch(out, /Set-Location '[^']*install\.ps1'/);
+    assert.match(out, /powershell -NoProfile -ExecutionPolicy Bypass -File \.\\install\.ps1 -UpdateOnly/);
+    assert.match(out, /末尾的 1 不能漏/);
+    assert.doesNotMatch(out, /-File install\.ps1/);
   });
+});
+
+test("reportPatchStatus resolves Windows installer from marketplace checkout outside cwd", () => {
+  const { tmp, home } = makeTmpHome();
+  const pluginRoot = path.join(home, ".claude", "plugins", "cache", "claude-code-zh-cn", "claude-code-zh-cn", "2.12.1");
+  const marketplaceRoot = path.join(home, ".claude", "plugins", "marketplaces", "O'Brien $Plugin Source");
+  const knownMarketplaces = path.join(home, ".claude", "plugins", "known_marketplaces.json");
+  fs.mkdirSync(pluginRoot, { recursive: true });
+  fs.mkdirSync(path.join(marketplaceRoot, "plugin"), { recursive: true });
+  fs.writeFileSync(path.join(marketplaceRoot, "install.ps1"), "# fixture\n");
+  fs.writeFileSync(path.join(marketplaceRoot, "plugin", "patch-cli.js"), "// fixture\n");
+  fs.mkdirSync(path.dirname(knownMarketplaces), { recursive: true });
+  fs.writeFileSync(knownMarketplaces, JSON.stringify({
+    "taekchef": {
+      source: { source: "github", repo: "taekchef/claude-code-zh-cn" },
+      installLocation: marketplaceRoot,
+    },
+  }));
+
+  const previousCwd = process.cwd();
+  process.chdir(os.tmpdir());
+  try {
+    const entry = resolveInstallerEntry(pluginRoot, "win32", home);
+    const out = reportPatchStatus(pluginRoot, "win32", { home });
+    assert.equal(entry, path.join(marketplaceRoot, "install.ps1"));
+    // 解析出的目录进 Set-Location（单引号内的 ' 需转义成 ''），安装器本体走相对路径
+    assert.match(out, /Set-Location '.*O''Brien \$Plugin Source'/);
+    assert.match(out, /powershell -NoProfile -ExecutionPolicy Bypass -File \.\\install\.ps1 -UpdateOnly/);
+    assert.doesNotMatch(out, /-File install\.ps1/);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("reportPatchStatus gives clone guidance when Windows marketplace checkout is unavailable", () => {
+  const { tmp, home } = makeTmpHome();
+  const pluginRoot = path.join(home, ".claude", "plugins", "cache", "claude-code-zh-cn", "claude-code-zh-cn", "2.12.1");
+  fs.mkdirSync(pluginRoot, { recursive: true });
+
+  const out = reportPatchStatus(pluginRoot, "win32", { home });
+  assert.equal(resolveInstallerEntry(pluginRoot, "win32", home), null);
+  assert.match(out, /未找到包含 install\.ps1 的 marketplace 源码目录/);
+  assert.match(out, /git clone https:\/\/github\.com\/taekchef\/claude-code-zh-cn\.git/);
+  assert.doesNotMatch(out, /-File install\.ps1/);
+
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test("reportPatchStatus resolves POSIX installer and quotes paths with spaces", () => {
+  const { tmp, home } = makeTmpHome();
+  const pluginRoot = path.join(home, ".claude", "plugins", "cache", "claude-code-zh-cn", "claude-code-zh-cn", "2.12.1");
+  const marketplaceRoot = path.join(home, ".claude", "plugins", "marketplaces", "Chinese $Plugin's Source");
+  fs.mkdirSync(pluginRoot, { recursive: true });
+  fs.mkdirSync(path.join(marketplaceRoot, "plugin"), { recursive: true });
+  fs.writeFileSync(path.join(marketplaceRoot, "install.sh"), "#!/bin/sh\n");
+  fs.writeFileSync(path.join(marketplaceRoot, "plugin", "patch-cli.sh"), "#!/bin/sh\n");
+  fs.writeFileSync(path.join(home, ".claude", "plugins", "known_marketplaces.json"), JSON.stringify({
+    "taekchef": {
+      source: { source: "github", repo: "taekchef/claude-code-zh-cn" },
+      installLocation: marketplaceRoot,
+    },
+  }));
+
+  const entry = resolveInstallerEntry(pluginRoot, "linux", home);
+  const out = reportPatchStatus(pluginRoot, "linux", { home });
+  const macOut = reportPatchStatus(pluginRoot, "darwin", { home });
+  assert.equal(entry, path.join(marketplaceRoot, "install.sh"));
+  assert.match(out, /bash '.*Chinese \$Plugin'\\''s Source[\\/]install\.sh' --update-only/);
+  assert.match(macOut, /bash '.*Chinese \$Plugin'\\''s Source[\\/]install\.sh' --update-only/);
+  const command = out.split("\n").find((line) => line.trimStart().startsWith("bash ")).trim();
+  const parsed = execFileSync(bashExecutable(), ["-c", `set -- ${command.slice(5, -" --update-only".length)}; printf '%s' "$1"`], {
+    encoding: "utf8",
+  });
+  assert.equal(parsed, entry);
+
+  fs.rmSync(tmp, { recursive: true, force: true });
 });
 
 test("reportPatchStatus keeps hook-based guidance on non-Windows", () => {

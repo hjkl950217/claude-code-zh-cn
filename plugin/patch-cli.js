@@ -277,6 +277,10 @@ function escapeSingleQuotedLiteralNeedleContent(text) {
         .replace(/'/g, "\\'");
 }
 
+function isProtectedProtocolLiteral(literal) {
+    return literal.quote === "`" && literal.text.startsWith("[Pasted text #${") && literal.text.endsWith(" lines]");
+}
+
 function replaceTemplateLiteralTextParts(parts, en, zh) {
     let hit = false;
     for (const part of parts) {
@@ -972,6 +976,82 @@ function installTurnDurationBackgroundLocalization() {
     );
 }
 
+function installPastedTextProtocolRepair() {
+    // 旧版补丁曾把粘贴附件协议中的 `lines]` 翻译为 `行]`，但解析器只接受英文。
+    // 仅修复 Pasted text 模板生成器，使已 patch 的安装可通过再次安装原地恢复。
+    tryRegexReplace(
+        /(`\[Pasted text #\$\{[A-Za-z0-9_$]+\} \+\$\{[A-Za-z0-9_$]+\} )行(\]`)/g,
+        (_match, prefix, suffix) => `${prefix}lines${suffix}`
+    );
+}
+
+function installRunningDisplayLocalization() {
+    // 只匹配 JSX children 中的进行中占位文案；工具类型映射里的 Running、
+    // 状态枚举 running 以及帮助示例保持原值。
+    tryRegexReplace(
+        /(children:)"Running\\u2026( ?")/g,
+        (_match, prefix, suffix) => `${prefix}"运行中…${suffix}`
+    );
+    tryRegexReplace(
+        /(\?`运行中 \$\{[^}]+\}\(\$\{[^}]+\}\)\\u2026`:)"Running\\u2026"/g,
+        (_match, prefix) => `${prefix}"运行中…"`
+    );
+}
+
+function installVisibleLineCountLocalization() {
+    // kAt() 只负责折叠内容的可见“+N lines”摘要。直接输出“行”，
+    // 不触碰 Pasted text 占位符中供附件解析器使用的英文协议。
+    tryRegexReplace(
+        /(function [A-Za-z0-9_$]+\(([A-Za-z0-9_$]+),([A-Za-z0-9_$]+)="line"\)\{if\(\2<=0\)return"";return`)(\\u2026|…) \+\$\{\2\} \$\{[A-Za-z0-9_$]+\(\2,\3\)\}(`\})/g,
+        (_match, prefix, countValue, _unit, ellipsis, suffix) => `${prefix}${ellipsis} +\${${countValue}} 行${suffix}`
+    );
+}
+
+function installCli233DisplayResidueLocalization() {
+    // 2.1.233 的流响应停滞提示拆成 JSX children 数组，时间值为动态插值，
+    // 因此不能由静态翻译表覆盖。仅替换完整的三段可见文案结构。
+    tryRegexReplace(/"Waiting for API response"/g, () => '"等待 API 响应"');
+    tryRegexReplace(
+        /children:\[" \\xB7 will retry in ",([A-Za-z0-9_$]+)," \\xB7 check your network"\]/g,
+        (_match, remaining) => `children:[" \\xB7 将在 ",${remaining}," 后重试 \\xB7 请检查网络"]`
+    );
+
+    // 新版展开提示从快捷键绑定动态生成：`(${shortcut} to expand)`。
+    tryRegexReplace(/\$\{([A-Za-z0-9_$]+)\} to expand/g, (_match, shortcut) => `\${${shortcut}} 展开`);
+
+    // yS() 是 /goal 等状态卡片复用的展开辅助组件。使用它的完整函数结构作为锚点，
+    // 仅改动该组件提供给 Chord 的可见 action，避免触及其他 action:"expand"。
+    tryRegexReplace(
+        /(function [A-Za-z0-9_$]+\(\)\{let [A-Za-z0-9_$]+=\w+\.c\(3\),[A-Za-z0-9_$]+=\w+\.useContext\([A-Za-z0-9_$]+\),[A-Za-z0-9_$]+=\w+\.useContext\([A-Za-z0-9_$]+\),[A-Za-z0-9_$]+=ox\("app:toggleTranscript","Global","ctrl\+o"\);if\([A-Za-z0-9_$]+\|\|[A-Za-z0-9_$]+\)\{return null\}[\s\S]*?chord:[A-Za-z0-9_$]+,action:)"expand"/g,
+        (_match, prefix) => `${prefix}"展开"`
+    );
+}
+
+function installGoalActiveIndicatorLocalization() {
+    // /goal 状态栏把命令名与状态词拼成一个可见 children 字面量。
+    // 只替换位于 children 数组、后接动态时长的显示文本，不改命令名和 active 状态值。
+    tryRegexReplace(
+        /(children:\[[\s\S]{0,300}?)"\/goal active"(,[A-Za-z0-9_$]+\]\})/g,
+        (_match, prefix, suffix) => `${prefix}"/goal 已启用"${suffix}`
+    );
+}
+
+function installGoalDisplayLocalization() {
+    // 2.1.233 的 /goal 状态卡片由条件表达式和动态统计拼接而成，
+    // 不会命中静态翻译表；只替换完整的可见字面量，不改状态值或数据字段。
+    tryRegexReplace(/"Goal could not be achieved"/g, () => '"未能达成目标"');
+    tryRegexReplace(/"Goal achieved"/g, () => '"目标已达成"');
+    tryRegexReplace(/"Goal not yet met\\u2026 continuing"/g, () => '"目标尚未达成…继续执行"');
+    tryRegexReplace(
+        /children:\["Goal: ",([A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)?)\]/g,
+        (_match, condition) => `children:["目标：",${condition}]`
+    );
+    tryRegexReplace(
+        /(case"goal_status"[\s\S]*?\.tokens!==void 0\)\{[A-Za-z0-9_$]+\.push\(`\$\{[A-Za-z0-9_$]+\} tokens`\)\})/g,
+        (_match, goalStatusBlock) => goalStatusBlock.replace(/ tokens`\)\}/, " 个 token`)}")
+    );
+}
+
 function installStatusbarToolActivityLocalization() {
     // Thought 状态栏（进行中 Thinking / 完成 Thought）
     tryRegexReplace(/([A-Za-z0-9_$]+)\?"Thinking":"Thought"/g, (_m, v) => `${v}?"思考中":"思考"`);
@@ -1152,9 +1232,10 @@ function installStatusbarToolActivityLocalization() {
         (_m, count) => `${count}===1?"个 Hook":"个 Hook"`
     );
     // memo 分支 "Ran " 字面量（children:[...,"Ran ",count," ",hookLabel," ",noun,""]）
+    // 词序纠正：输出 "已运行 <count> 个 <hookLabel> Hook"（防止出现 "已运行 1 stop 个 Hook" 的错误顺序）
     tryRegexReplace(
         /"Ran ",([A-Za-z0-9_$]+)," ",([A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)?)," ",([A-Za-z0-9_$]+),""/g,
-        (_m, count, label, noun) => `"已运行 ",${count}," ",${label}," ",${noun},""`
+        (_m, count, label) => `"已运行 ",${count}," 个 ",${label}," Hook",""`
     );
 }
 
@@ -1207,6 +1288,211 @@ function installErrorTemplateLocalization() {
     tryRegexReplace(/\`timed out after \$\{([^}]+)\} milliseconds\`/g, (_m, t) => `\`超时（\${${t}} 毫秒）\``);
 }
 
+function installCli233ResidualUILocalization() {
+    // 2.1.233 六个用户报告残留 + 主动扫描到的同族动态 UI 文案。
+    // 全部是给用户看的显示文案；API/环境变量名（stop_hook_active、
+    // CLAUDE_CODE_STOP_HOOK_BLOCK_CAP、--model）和状态枚举（idle/attached）保持英文。
+
+    // 1. Null-bytes 错误只改 UI 可显示的 Error 文案，不触碰 makeErrorWithCode 内部 API
+    tryRegexReplace(
+        /throw Error\("Path contains null bytes"\)/g,
+        () => 'throw Error("路径包含空字节")'
+    );
+
+    // 2. 中断回合的追问后缀（已中断 已汉化，这里补问句）
+    tryRegexReplace(
+        /children:"\\xB7 What should Claude do instead\?"/g,
+        () => 'children:"\\xB7 Claude 应该怎么做？"'
+    );
+
+    // 3. 模型选择器 fallback 文案（保留 --model 选项描述）
+    tryReplace(
+        '"Switch between Claude models. Your pick becomes the default for new sessions. For other/previous model names, specify with --model."',
+        '"切换 Claude 模型。你的选择会作为新会话的默认模型。其他/之前的模型名称请用 --model 指定。"'
+    );
+
+    // 4. Stop/SubagentStop Hook 阻断警告（分号转义模板与字符串拼接两段）
+    tryRegexReplace(
+        /`A hook blocked the turn from ending \$\{([^}]+)\} consecutive times \\u2014 overriding and ending turn\. `\+"For Stop\/SubagentStop hooks, check stop_hook_active in the input and return success while it's true\. Set CLAUDE_CODE_STOP_HOOK_BLOCK_CAP to raise this limit\."/g,
+        (_m, oa) =>
+            "`一个 Hook 已连续 ${" + oa + "} 次阻止回合结束 \\u2014 正在覆盖并结束回合。 `+" +
+            '"对于 Stop/SubagentStop Hook，请检查输入中的 stop_hook_active，并在其值为 true 时返回成功。设置 CLAUDE_CODE_STOP_HOOK_BLOCK_CAP 可提高此上限。"'
+    );
+
+    // 5. 状态栏上下文占用/压缩提示（保留动态百分比和 /compact 命令名）
+    tryRegexReplace(
+        /\$\{100-([^}]+)\}% context used/g,
+        (_m, v) => `\${100-${v}}% 上下文已使用`
+    );
+    tryRegexReplace(
+        /\$\{([^}]+)\}% until auto-compact/g,
+        (_m, v) => `\${${v}}% 后自动压缩`
+    );
+    tryRegexReplace(
+        /Context low \(\$\{([^}]+)\}% remaining\)/g,
+        (_m, v) => `上下文不足（剩余 \${${v}}%）`
+    );
+    // 注意：此替换须避免命中 NCw 拼接的 `${NCw} \xB7 ${psc}`（第5前序部分），
+    // 这里只改独立存在的 `\xB7 Run /compact ...` 模板尾段。
+    tryRegexReplace(
+        /\\xB7 Run \/compact to compact & continue/g,
+        () => " \\xB7 运行 /compact 压缩并继续"
+    );
+
+    // 6. thinking 状态动词集（函数名与阈值常量名随上游 minify 漂移，按结构匹配；
+    //    只替换返回的英文字符串，保留函数名、参数与阈值比较逻辑，不改变内部判断）
+    tryRegexReplace(
+        /function ([A-Za-z_$][\w$]*)\(([^)]+)\)\{if\(\2>=([A-Za-z_$][\w$]*)\)return"almost done thinking";if\(\2>=([A-Za-z_$][\w$]*)\)return"thinking some more";if\(\2>=([A-Za-z_$][\w$]*)\)return"thinking more";if\(\2>=([A-Za-z_$][\w$]*)\)return"still thinking";return"thinking"\}/g,
+        (_m, fn, e, f, ys, ny, ly) =>
+            `function ${fn}(${e}){if(${e}>=${f})return"即将完成思考";if(${e}>=${ys})return"继续思考中";if(${e}>=${ny})return"深入思考";if(${e}>=${ly})return"仍在思考";return"思考中"}`
+    );
+
+    // 7. effort 后缀模板（保留 effort level API 值；gge/D2e 只做取值）
+    tryRegexReplace(
+        /` with \$\{([^}]+)\} effort`/g,
+        (_m, expr) => "`（思考强度 ${" + expr + "}）`"
+    );
+
+    // 8. 工具/思考活动时长模板（la 时长已汉化,只改前缀与后缀）
+    tryRegexReplace(
+        /`running tool for \$\{la\(([^}]+)\)\}`/g,
+        (_m, ms) => "`正在运行工具，已用 ${la(" + ms + ")}`"
+    );
+    tryRegexReplace(
+        /`ran tool for \$\{la\(([^}]+)\)\}`/g,
+        (_m, ms) => "`已完成工具，用时 ${la(" + ms + ")}`"
+    );
+    tryRegexReplace(
+        /`thought for \$\{Math\.max\(1,Math\.round\(([^}]+)\/1000\)\)\}s`/g,
+        (_m, ms) => "`已思考 ${Math.max(1,Math.round(" + ms + "/1000))} 秒`"
+    );
+
+    // 9. remoting banner 连接/重连提示（ReactNode + 模板拼接）
+    tryRegexReplace(/Xt\.yellow\("Connecting"\)/g, () => 'Xt.yellow("连接中")');
+    tryRegexReplace(/Xt\.yellow\("Reconnecting"\)/g, () => 'Xt.yellow("重新连接")');
+    tryRegexReplace(/`retrying in \$\{([^}]+)\}`/g, (_m, v) => `\`\${${v}} 后重试\``);
+    tryRegexReplace(/`disconnected \$\{([^}]+)\}`/g, (_m, v) => `\`已断开 \${${v}}\``);
+
+    // 10. remoting 状态赋值的可见文案（只改字符串值,状态键 idle/attached 不变）
+    // 匹配 updateIdleStatus/setAttached 内紧凑赋值,保留逗号与变量 i
+    tryRegexReplace(/,i="Ready",/g, () => ',i="就绪",');
+    tryRegexReplace(/,i="Connected",/g, () => ',i="已连接",');
+
+    // 11. FleetView 任务状态显示映射（键是状态枚举,值是给用户的显示文案）
+    tryReplace(
+        ',E4t={review:"Ready for review",blocked:"Needs input",working:"Working",done:"Completed"}',
+        ',E4t={review:"待审核",blocked:"需要输入",working:"进行中",done:"已完成"}'
+    );
+    tryReplace(
+        ',mKw={review:"",blocked:"Sessions that have a question or need your decision land here",working:"Sessions Claude is actively working on \\u2014 they keep running even if you close the terminal",done:"Finished sessions wait here for you to review"}',
+        ',mKw={review:"",blocked:"需要你决策的会话会出现在这里",working:"Claude 正在积极处理的会话 \\u2014 关闭终端后仍在运行",done:"已完成的会话留在这里等待你查看"}'
+    );
+
+    // 12. resume 提示（resumeHint 写入 stdout 的模板；保留 claude --resume/--worktree 命令形态）
+    // cli.js 中该模板的换行可能是真实换行 U+000A（JSON.stringify 显示为 \n）或字面 `\n`
+    // （反斜杠+n 两字符），两种形态都匹配。
+    tryRegexReplace(
+        /`(\n|\\n)Resume this session with:(\n|\\n)claude \$\{([^}]+)\}--resume \$\{([^}]+)\}(\n|\\n)`/g,
+        (_m, _a, _b, o, r, _c) => `\`\\n请使用以下命令继续会话：\\nclaude \${${o}}--resume \${${r}}\\n\``
+    );
+
+    // 13. /rewind 回滚提示的多段 push 数组（保留 --- 分隔线、/rewind 命令名与 ${e.ref} 变量）
+    tryReplace(
+        '"Don\'t want these changes? Resume this session (above), then run"',
+        '"不想保留这些更改？请在上方恢复会话，然后运行"'
+    );
+    tryReplace(
+        '"`/rewind` to roll back the turn\'s tool edits (bash-made changes"',
+        '"`/rewind` 回滚本次回合的工具编辑（bash 产生的更改"'
+    );
+    tryReplace(
+        "`excluded). ${e.ref} holds a full snapshot until this session's`",
+        "`（已排除）。${e.ref} 存储了完整快照，直到本次会话的`"
+    );
+    tryReplace(
+        '"next checkpoint, or for up to ~2 weeks."',
+        '"下一个检查点，或最长约 2 周。"'
+    );
+
+    // 14. remote-control 恢复/环境保留提示（保留 claude remote-control、--continue、--session-id 命令形态）
+    tryRegexReplace(
+        /`Resume this session by running \\`claude remote-control \$\{e\.ownsPointer\?"--continue":`--session-id \$\{l\}`\}\\\``/g,
+        () => '`请运行 \\`claude remote-control ${e.ownsPointer?"--continue":`--session-id ${l}`}\\` 恢复本会话`'
+    );
+    tryReplace(
+        '"Environment preserved. Restart `claude remote-control` to reconnect existing sessions."',
+        '"环境已保留。请重新启动 `claude remote-control` 以重新连接现有会话。"'
+    );
+
+    // 15. auto_mode_pregather 上下文标签（显示在 context 标签中）
+    tryReplace(
+        '"CLAUDE.md files and project docs"',
+        '"CLAUDE.md 文件与项目文档"'
+    );
+    tryReplace(
+        '"Repo facts"',
+        '"仓库事实"'
+    );
+    tryReplace(
+        '"Existing auto-mode settings (selective read)"',
+        '"现有自动模式设置（选择性读取）"'
+    );
+    tryReplace(
+        '"Recent usage in this project (names only)"',
+        '"此项目的最近使用情况（仅名称）"'
+    );
+    tryReplace(
+        '"Config scans (names only)"',
+        '"配置扫描（仅名称）"'
+    );
+    tryReplace(
+        '"Shipped default auto-mode rule labels"',
+        '"随附的默认自动模式规则标签"'
+    );
+
+    // 16. hook 配置 schema 描述（/hooks 配置帮助文本）
+    tryReplace(
+        '"Custom status message to display in spinner while hook runs"',
+        '"Hook 运行时在 spinner 显示的自定义状态消息"'
+    );
+    tryReplace(
+        '"If true, hook runs once and is removed after execution"',
+        '"若为 true，Hook 只运行一次，执行后即移除"'
+    );
+
+    // 17. 新功能公告标题与遥测确认文案
+    tryReplace(
+        '"Feature of the week:"',
+        '"本周功能："'
+    );
+    tryReplace(
+        '"Help improve our AI models "',
+        '"帮助改进我们的 AI 模型 "'
+    );
+
+    // 18. memory 保存说明标题属于模型提示词契约（cli-translations.json 已标记
+    //     skipPatch:"model-prompt-contract"），不得在此硬编码翻译，否则会绕过标记
+    //     并触发 upstream-compat 的 system_prompt_memory_contract preserve 失败。
+
+    // 19. 遥测开关相关（无尾空格标题、隐私选项 label、日志；\xB7 为源码字面转义）
+    tryReplace(
+        '"Help improve our AI models"',
+        '"帮助改进我们的 AI 模型"'
+    );
+    tryReplace(
+        '"Accept terms \\xB7 Help improve our AI models: ON"',
+        '"接受条款 \\xB7 帮助改进我们的 AI 模型：开"'
+    );
+    tryReplace(
+        '"Accept terms \\xB7 Help improve our AI models: OFF"',
+        '"接受条款 \\xB7 帮助改进我们的 AI 模型：关"'
+    );
+    tryReplace(
+        '"Accept terms \\xB7 Help improve our AI models: OFF (for emails with your domain)"',
+        '"接受条款 \\xB7 帮助改进我们的 AI 模型：关（针对你域名的邮件）"'
+    );
+}
+
 // === 特殊 patch（基于精确代码模式匹配，安全）===
 // 这些 patch 匹配非常特定的代码模式，不会误伤标识符
 
@@ -1223,9 +1509,16 @@ for (const step of [
     installWorkflowLifecycleResidueLocalization,
     installCli226DisplayDeltaLocalization,
     installTurnDurationBackgroundLocalization,
+    installPastedTextProtocolRepair,
+    installRunningDisplayLocalization,
+    installVisibleLineCountLocalization,
+    installCli233DisplayResidueLocalization,
+    installGoalActiveIndicatorLocalization,
+    installGoalDisplayLocalization,
     installStatusbarToolActivityLocalization,
     installConfigRemainderLocalization,
     installErrorTemplateLocalization,
+    installCli233ResidualUILocalization,
 ]) {
     try {
         step();
@@ -1425,6 +1718,9 @@ if (translationsFile && fs.existsSync(translationsFile)) {
 
         let hit = false;
         for (const literal of literals) {
+            if (isProtectedProtocolLiteral(literal)) {
+                continue;
+            }
             if (literal.quote === "`") {
                 if (!replaceWholeTemplateLiteral(literal, en, zh)) {
                     if (!replaceTemplateLiteralTextParts(literal.parts, en, zh)) {

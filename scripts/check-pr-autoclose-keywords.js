@@ -120,13 +120,13 @@ function collectSources(args) {
 
   if (args.repoFiles || (!args.bodyEnv && !args.bodyFile)) {
     for (const file of repoBodyEntrypoints(args.repoRoot)) {
-      sources.push({ name: path.relative(args.repoRoot, file), text: readTextSource(file) });
+      sources.push({ name: path.relative(args.repoRoot, file).split(path.sep).join("/"), text: readTextSource(file) });
     }
   }
 
   if (args.bodyFile) {
     const bodyFile = path.resolve(args.bodyFile);
-    sources.push({ name: path.relative(args.repoRoot, bodyFile), text: readTextSource(bodyFile) });
+    sources.push({ name: path.relative(args.repoRoot, bodyFile).split(path.sep).join("/"), text: readTextSource(bodyFile) });
   }
 
   if (args.bodyEnv) {

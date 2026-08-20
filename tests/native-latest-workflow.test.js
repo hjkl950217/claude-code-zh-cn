@@ -59,7 +59,7 @@ test("native latest candidate workflow also verifies Windows native candidates",
 test("native latest candidate verification waits for workflow validation", () => {
   const workflow = readWorkflow();
 
-  assert.match(workflow, /^\s*verify:\n(?:.*\n){0,4}?\s+needs:\s*validate/m);
+  assert.match(workflow, /^\s*verify:\r?\n(?:(?!^\s{2}\S)[\s\S])*?^\s+needs:\s*validate\s*$/m);
 });
 
 test("native latest candidate workflow resolves the requested or current latest version", () => {

@@ -38,7 +38,11 @@ $SourceRepoFile = Join-Path $StateRoot ".source-repo"
 $LastUpdateCheckFile = Join-Path $StateRoot ".last-update-check"
 $SettingsOverlayCacheFile = Join-Path $StateRoot ".settings-overlay-cache.json"
 $NativePatchPendingFile = Join-Path $StateRoot ".native-patch-pending.json"
-$SettingsFile = "$env:USERPROFILE\.claude\settings.json"
+$SettingsFile = if ($env:CLAUDE_CONFIG_DIR) {
+    Join-Path $env:CLAUDE_CONFIG_DIR "settings.json"
+} else {
+    "$env:USERPROFILE\.claude\settings.json"
+}
 $UpdateCheckInterval = if ($env:ZH_CN_UPDATE_CHECK_INTERVAL_SECONDS) {
     [int]$env:ZH_CN_UPDATE_CHECK_INTERVAL_SECONDS
 } else { 21600 }
@@ -63,16 +67,16 @@ $TmpDir = "$env:TEMP\cczh-hook-$PID"
 function Invoke-JsScript {
     param(
         [string]$Code,
-        [string[]]$Args
+        [string[]]$Arguments
     )
     $tmp = Join-Path $TmpDir "tmp-$PID-$((Get-Random).ToString('x')).js"
     New-Item -Force -ItemType Directory -Path $TmpDir | Out-Null
-    $Code | Out-File -FilePath $tmp -Encoding ascii -NoNewline
+    [System.IO.File]::WriteAllText($tmp, $Code, [System.Text.UTF8Encoding]::new($false))
     try {
-        if ($Args) {
-            node $tmp @Args 2>$null
+        if ($Arguments) {
+            & node $tmp @Arguments
         } else {
-            node $tmp 2>$null
+            & node $tmp
         }
     } finally {
         Remove-Item $tmp -Force -ErrorAction SilentlyContinue
@@ -85,7 +89,7 @@ function Read-ManifestVersion($Target) {
     $code = @'
 try{const d=JSON.parse(require("fs").readFileSync(process.argv[2],"utf8"));process.stdout.write(String(d.version||""))}catch(e){}
 '@
-    Invoke-JsScript -Code $code -Args @($Target)
+    Invoke-JsScript -Code $code -Arguments @($Target)
 }
 
 function Test-VersionIsNewer($Current, $Latest) {
@@ -94,7 +98,7 @@ function parse(v){return String(v||"").split(".").map(p=>{const n=Number.parseIn
 function cmp(a,b){const m=Math.max(a.length,b.length);for(let i=0;i<m;i++){const l=a[i]||0,r=b[i]||0;if(l>r)return 1;if(l<r)return -1}return 0}
 process.exit(cmp(parse(process.argv[2]),parse(process.argv[3]))>0?0:1)
 '@
-    Invoke-JsScript -Code $code -Args @($Latest, $Current)
+    Invoke-JsScript -Code $code -Arguments @($Latest, $Current)
     return ($LASTEXITCODE -eq 0)
 }
 
@@ -168,14 +172,14 @@ const hash=crypto.createHash("sha256");
 for(const f of files){const t=path.join(root,f);if(!fs.existsSync(t))continue;hash.update(f);hash.update("\0");hash.update(fs.readFileSync(t));hash.update("\0")}
 process.stdout.write(hash.digest("hex").slice(0,16));
 '@
-    Invoke-JsScript -Code $code -Args @($Root)
+    Invoke-JsScript -Code $code -Arguments @($Root)
 }
 
 function Read-CliVersion($CliFile) {
     $code = @'
 const t=require("fs").readFileSync(process.argv[2],"utf8");const m=t.match(/^\/\/ Version: (.+)$/m);process.stdout.write(m?m[1]:"")
 '@
-    Invoke-JsScript -Code $code -Args @($CliFile)
+    Invoke-JsScript -Code $code -Arguments @($CliFile)
 }
 
 function Test-NpmCliResidue($CliFile) {
@@ -185,7 +189,7 @@ const probes=["Quick safety check","This command requires approval","Use /btw to
 try{const t=fs.readFileSync(process.argv[2],"utf8");const r=probes.filter(p=>t.includes(p));if(r.length>0){process.stdout.write(r.join(" | "));process.exit(0)}}catch(e){}
 process.exit(1);
 '@
-    Invoke-JsScript -Code $code -Args @($CliFile)
+    Invoke-JsScript -Code $code -Arguments @($CliFile)
     return ($LASTEXITCODE -eq 0)
 }
 
@@ -235,7 +239,7 @@ for(const key of ["macosNativeOfficialInstallerExperimental","macosNativeExperim
 }
 process.exit(versions.includes(version)?0:1);
 '@
-    Invoke-JsScript -Code $code -Args @($supportFile, $Version, $Platform) | Out-Null
+    Invoke-JsScript -Code $code -Arguments @($supportFile, $Version, $Platform) | Out-Null
     return ($LASTEXITCODE -eq 0)
 }
 
@@ -260,7 +264,7 @@ for(const key of ["macosNativeOfficialInstallerExperimental","macosNativeExperim
 }
 process.exit(1);
 '@
-    Invoke-JsScript -Code $code -Args @($supportFile, $Version, $Platform) | Out-Null
+    Invoke-JsScript -Code $code -Arguments @($supportFile, $Version, $Platform) | Out-Null
     return ($LASTEXITCODE -eq 0)
 }
 
@@ -282,6 +286,9 @@ function Test-NativeMarkerCurrent($Marker, $Version, $Hash, $Revision, $Mode, $P
 function Repair-SettingsFromCache {
     $settingsDir = Split-Path -Parent $SettingsFile
     New-Item -Force -ItemType Directory -Path $settingsDir | Out-Null
+    if (-not (Test-Path $SettingsFile)) {
+        Set-Content -Path $SettingsFile -Value "{}" -NoNewline -Encoding utf8
+    }
 
     # 旧安装路径：install.ps1 会预生成 .settings-overlay-cache.json，直接合并。
     if (Test-Path $SettingsOverlayCacheFile) {
@@ -290,7 +297,7 @@ const fs=require("fs");
 const settingsFile=process.argv[2];
 const overlayFile=process.argv[3];
 const pluginKeys=["language","spinnerTipsEnabled","spinnerVerbs","spinnerTipsOverride"];
-function readJson(file,fallback){try{return JSON.parse(fs.readFileSync(file,"utf8").replace(/^\uFEFF/,""))}catch(e){return fallback}}
+function readJson(file,fallback){try{return JSON.parse(fs.readFileSync(file,"utf8").replace(/^﻿/,""))}catch(e){return fallback}}
 function isObject(value){return value&&typeof value==="object"&&!Array.isArray(value)}
 function deepMerge(base,override){const result={...base};for(const [key,value] of Object.entries(override)){if(isObject(result[key])&&isObject(value)){result[key]=deepMerge(result[key],value)}else{result[key]=value}}return result}
 const overlay=readJson(overlayFile,null);
@@ -304,7 +311,7 @@ const merged=deepMerge(settings,overlay);
 const changed=legacySpinnerVerbs||pluginKeys.some((key)=>JSON.stringify(settings[key])!==JSON.stringify(merged[key]));
 if(changed){fs.writeFileSync(settingsFile,JSON.stringify(merged,null,2)+"\n")}
 '@
-        Invoke-JsScript -Code $code -Args @($SettingsFile, $SettingsOverlayCacheFile) | Out-Null
+        Invoke-JsScript -Code $code -Arguments @($SettingsFile, $SettingsOverlayCacheFile)
         return
     }
 

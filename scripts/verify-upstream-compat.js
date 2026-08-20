@@ -673,14 +673,15 @@ function collectResidue(text, checks) {
 function checkMatches(text, check, source = false) {
   const pattern = source ? check.sourcePattern : check.pattern;
   const regex = source ? check.sourceRegex : check.regex;
+  const normalizedText = text.replace(/\r\n?/g, "\n");
 
-  if (pattern && text.includes(pattern)) {
+  if (pattern && normalizedText.includes(pattern.replace(/\r\n?/g, "\n"))) {
     return true;
   }
 
   if (regex) {
     const compiled = new RegExp(regex, "g");
-    return compiled.test(text);
+    return compiled.test(normalizedText);
   }
 
   return false;

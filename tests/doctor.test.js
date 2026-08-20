@@ -649,7 +649,7 @@ test("runDoctor fails native runtime self-check when executable is killed", () =
 
   const runtime = result.checks.find((item) => item.id === "native-runtime");
   assert.equal(runtime.status, "fail");
-  assert.match(runtime.detail, /SIGKILL|status=137/);
+  assert.match(runtime.detail, process.platform === "win32" ? /UNKNOWN|error=/ : /SIGKILL|status=137/);
   assert.equal(result.ok, false);
   assert.ok(result.recommendations.some((line) => line.includes("恢复原始 native 二进制")));
 });

@@ -6,6 +6,7 @@ const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
+const unixOnly = process.platform === "win32" ? "requires a POSIX shell environment" : false;
 
 function escapeRegex(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -235,7 +236,7 @@ function runClaude(context, extraEnv = {}) {
   });
 }
 
-test("install.sh installs launcher assets and npm launcher patches before exec on same-version overwrite", () => {
+test("install.sh installs launcher assets and npm launcher patches before exec on same-version overwrite", { skip: unixOnly }, () => {
   const context = createLauncherContext();
   const install = runInstall(context);
 
@@ -259,7 +260,7 @@ test("install.sh installs launcher assets and npm launcher patches before exec o
   assert.equal(patchedCli.includes("This command requires approval"), false, patchedCli);
 });
 
-test("launcher warns and still execs real claude when prelaunch patch fails", () => {
+test("launcher warns and still execs real claude when prelaunch patch fails", { skip: unixOnly }, () => {
   const context = createLauncherContext();
   const install = runInstall(context);
 
@@ -279,7 +280,7 @@ test("launcher warns and still execs real claude when prelaunch patch fails", ()
   assert.match(fs.readFileSync(context.cliFile, "utf8"), /Quick safety check/);
 });
 
-test("install.sh removes stale launcher injection for unsupported third-party claude wrappers", () => {
+test("install.sh removes stale launcher injection for unsupported third-party claude wrappers", { skip: unixOnly }, () => {
   const context = createUnsupportedWrapperContext();
   const profileBlock = [
     "# test profile",
@@ -306,7 +307,7 @@ test("install.sh removes stale launcher injection for unsupported third-party cl
   );
 });
 
-test("install.sh ignores global npm fallback when current claude is a third-party wrapper", () => {
+test("install.sh ignores global npm fallback when current claude is a third-party wrapper", { skip: unixOnly }, () => {
   const context = createUnsupportedWrapperContext({ withGlobalNpmFallback: true });
 
   const install = runInstall(context);
@@ -320,7 +321,7 @@ test("install.sh ignores global npm fallback when current claude is a third-part
   );
 });
 
-test("launcher strips itself from PATH before execing third-party wrappers to avoid cmux-style argv growth", () => {
+test("launcher strips itself from PATH before execing third-party wrappers to avoid cmux-style argv growth", { skip: unixOnly }, () => {
   const context = createCmuxWrapperContext();
 
   const launch = runClaude(context, { ZH_CN_REAL_CLAUDE: "" });
@@ -343,7 +344,7 @@ test("Windows launchers pass filtered PATH to the real claude command", () => {
   assert.match(cmd, /set "PATH=%FILTERED_PATH%"/);
 });
 
-test("uninstall.sh removes launcher injection and restores npm cli backup", () => {
+test("uninstall.sh removes launcher injection and restores npm cli backup", { skip: unixOnly }, () => {
   const context = createLauncherContext();
   const install = runInstall(context);
 
