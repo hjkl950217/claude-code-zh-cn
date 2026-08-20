@@ -1339,11 +1339,12 @@ function installCli233ResidualUILocalization() {
         () => " \\xB7 运行 /compact 压缩并继续"
     );
 
-    // 6. thinking 状态动词集（BYS 完整函数锚点,阈值常量不改变）
+    // 6. thinking 状态动词集（函数名与阈值常量名随上游 minify 漂移，按结构匹配；
+    //    只替换返回的英文字符串，保留函数名、参数与阈值比较逻辑，不改变内部判断）
     tryRegexReplace(
-        /function BYS\(([^)]+)\)\{if\(\1>=([^}]+)\)return"almost done thinking";if\(\1>=([^}]+)\)return"thinking some more";if\(\1>=([^}]+)\)return"thinking more";if\(\1>=([^}]+)\)return"still thinking";return"thinking"\}/g,
-        (_m, e, f, ys, ny, ly) =>
-            `function BYS(${e}){if(${e}>=${f})return"即将完成思考";if(${e}>=${ys})return"继续思考中";if(${e}>=${ny})return"深入思考";if(${e}>=${ly})return"仍在思考";return"思考中"}`
+        /function ([A-Za-z_$][\w$]*)\(([^)]+)\)\{if\(\2>=([A-Za-z_$][\w$]*)\)return"almost done thinking";if\(\2>=([A-Za-z_$][\w$]*)\)return"thinking some more";if\(\2>=([A-Za-z_$][\w$]*)\)return"thinking more";if\(\2>=([A-Za-z_$][\w$]*)\)return"still thinking";return"thinking"\}/g,
+        (_m, fn, e, f, ys, ny, ly) =>
+            `function ${fn}(${e}){if(${e}>=${f})return"即将完成思考";if(${e}>=${ys})return"继续思考中";if(${e}>=${ny})return"深入思考";if(${e}>=${ly})return"仍在思考";return"思考中"}`
     );
 
     // 7. effort 后缀模板（保留 effort level API 值；gge/D2e 只做取值）

@@ -582,3 +582,23 @@ test("check-translation-sentinels passes when configured probes are absent", () 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /No sentinel hits/);
 });
+
+// spinner 动词表是纯中文轮换词（CC 的英文 fun-spinner verbs 整体替换），
+// 不应混入「中文 + 英文 ing 后缀」这种中英混拼条目（如历史误译「焯水ing」）。
+// 同时校验根目录源文件与 plugin payload 两份保持一致。
+test("spinner verbs contain no CJK-plus-English-ing mixed suffixes", () => {
+  const roots = [
+    path.join(repoRoot, "verbs", "zh-CN.json"),
+    path.join(repoRoot, "plugin", "verbs", "zh-CN.json"),
+  ];
+
+  for (const verbsFile of roots) {
+    const { verbs } = JSON.parse(fs.readFileSync(verbsFile, "utf8"));
+    const mixed = verbs.filter((v) => /[一-鿿]ing$/.test(v));
+    assert.deepEqual(
+      mixed,
+      [],
+      `mixed CJK+ing spinner verb found in ${verbsFile}: ${JSON.stringify(mixed)}`
+    );
+  }
+});
