@@ -1270,6 +1270,35 @@ test("thinking status verb function is localized while preserving thresholds", (
   assert.match(patched, /function BYS/);
 });
 
+test("thinking status verb function is localized when upstream renames the function (2.1.237 I8w + new threshold names)", () => {
+  // CC 2.1.237 把 BYS 重命名为 I8w，阈值常量 FYS/$YS/NYS/LYS 改为 R8w/C8w/x8w/k8w；
+  // 函数体结构与旧版完全一致，仅标识符漂移。补丁必须按结构而非具体名匹配。
+  const patched = patchFixture([
+    'function I8w(e){if(e>=R8w)return"almost done thinking";if(e>=C8w)return"thinking some more";if(e>=x8w)return"thinking more";if(e>=k8w)return"still thinking";return"thinking"}',
+    "",
+  ]);
+
+  for (const residue of [
+    "almost done thinking",
+    "thinking some more",
+    "thinking more",
+    "still thinking",
+    'return"thinking"',
+  ]) {
+    assert.equal(patched.includes(residue), false, `raw residue remained: ${residue}\n${patched}`);
+  }
+  assert.match(patched, /"即将完成思考"/);
+  assert.match(patched, /"继续思考中"/);
+  assert.match(patched, /仍在思考/);
+  assert.match(patched, /"思考中"/);
+  // 函数名与阈值常量必须原样保留（不改变内部逻辑判断）
+  assert.match(patched, /function I8w\(e\)/);
+  assert.match(patched, /if\(e>=R8w\)return/);
+  assert.match(patched, /if\(e>=C8w\)return/);
+  assert.match(patched, /if\(e>=x8w\)return/);
+  assert.match(patched, /if\(e>=k8w\)return/);
+});
+
 test("effort suffix template localizes around the raw effort level value", () => {
   const patched = patchFixture([
     'function VTt(e,t){if(t===void 0)return"";let r=Jne(e,t);if(r===void 0)return"";return` with ${gge(D2e(r))} effort`}',
