@@ -169,7 +169,13 @@ test("reportPatchStatus guides Windows native when marker missing", () => {
     assert.match(out, /暂未检测到 CLI patch 标记/);
     assert.match(out, /手动触发/);
     assert.match(out, /install\.ps1 -UpdateOnly/);
-    assert.match(out, /powershell -NoProfile -ExecutionPolicy Bypass -File '.*install\.ps1' -UpdateOnly/);
+    // 命令拆成 Set-Location + 相对 .\install.ps1 两行：长路径不再挤在一行里，
+    // 复制时不会把结尾的扩展名截断成 .ps。install.ps1 用 $PSScriptRoot 解析路径，
+    // 与当前目录无关，所以先 Set-Location 再相对调用是安全的。
+    assert.match(out, /Set-Location '[^']*[\\/][^']*'/);
+    assert.doesNotMatch(out, /Set-Location '[^']*install\.ps1'/);
+    assert.match(out, /powershell -NoProfile -ExecutionPolicy Bypass -File \.\\install\.ps1 -UpdateOnly/);
+    assert.match(out, /末尾的 1 不能漏/);
     assert.doesNotMatch(out, /-File install\.ps1/);
   });
 });
@@ -197,7 +203,9 @@ test("reportPatchStatus resolves Windows installer from marketplace checkout out
     const entry = resolveInstallerEntry(pluginRoot, "win32", home);
     const out = reportPatchStatus(pluginRoot, "win32", { home });
     assert.equal(entry, path.join(marketplaceRoot, "install.ps1"));
-    assert.match(out, /-File '.*O''Brien \$Plugin Source[\\/]install\.ps1' -UpdateOnly/);
+    // 解析出的目录进 Set-Location（单引号内的 ' 需转义成 ''），安装器本体走相对路径
+    assert.match(out, /Set-Location '.*O''Brien \$Plugin Source'/);
+    assert.match(out, /powershell -NoProfile -ExecutionPolicy Bypass -File \.\\install\.ps1 -UpdateOnly/);
     assert.doesNotMatch(out, /-File install\.ps1/);
   } finally {
     process.chdir(previousCwd);

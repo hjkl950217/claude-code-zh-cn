@@ -1385,3 +1385,24 @@ test("agent task status display map is localized while keeping the status keys",
   assert.equal(patched.includes('LQi=["review","blocked","working","done"]'), true, patched);
   assert.equal(patched.includes('review:""'), true, patched);
 });
+
+// translations-quality.test.js 只校验这些条目在 cli-translations.json 里带了
+// skipPatch:"model-prompt-contract" 标记，管不住 patch-cli.js 里的结构化 patch。
+// 硬编码的 tryReplace 会绕过标记直接改写契约文案，让 upstream-compat 的
+// preserve 规则失败。这里端到端校验：每条契约文案在 patch 后必须原样保留。
+test("model-facing prompt contract fragments survive patching verbatim", () => {
+  const contractFragments = JSON.parse(fs.readFileSync(translations, "utf8"))
+    .filter((entry) => entry.skipPatch === "model-prompt-contract")
+    .map((entry) => entry.en);
+
+  assert.ok(contractFragments.length > 0, "no model-prompt-contract entries found");
+
+  for (const fragment of contractFragments) {
+    const patched = patchFixture([`let contract=${JSON.stringify(fragment)};`, ""]);
+    assert.equal(
+      patched.includes(JSON.stringify(fragment)),
+      true,
+      `prompt contract fragment was rewritten by patch-cli.js: ${JSON.stringify(fragment)}\n${patched}`
+    );
+  }
+});

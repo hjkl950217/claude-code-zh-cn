@@ -1470,11 +1470,9 @@ function installCli233ResidualUILocalization() {
         '"帮助改进我们的 AI 模型 "'
     );
 
-    // 18. memory 保存说明标题
-    tryReplace(
-        '"Saving a memory is a two-step process:"',
-        '"保存记忆分为两步："'
-    );
+    // 18. memory 保存说明标题属于模型提示词契约（cli-translations.json 已标记
+    //     skipPatch:"model-prompt-contract"），不得在此硬编码翻译，否则会绕过标记
+    //     并触发 upstream-compat 的 system_prompt_memory_contract preserve 失败。
 
     // 19. 遥测开关相关（无尾空格标题、隐私选项 label、日志；\xB7 为源码字面转义）
     tryReplace(
