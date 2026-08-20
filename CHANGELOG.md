@@ -6,6 +6,36 @@
 - **次版本号**：新增功能或显著改进（比如新增 patch、新增翻译）
 - **修订号**：Bug 修复和小调整（比如修正一条翻译）
 
+## [2.13.0] - 2026-08-20
+
+### 新增
+
+- Claude Code `2.1.233`/`2.1.237` 动态界面汉化（#229）：
+  - `Running…` 进行中占位文案及其动态 fallback；
+  - `/goal` 状态卡片：`/goal active`、`Goal achieved`、`Goal could not be achieved`、`Goal not yet met… continuing`、Goal 标题与 turn/token 统计；
+  - `(ctrl+o to expand)` 展开提示与可见的 `… +N lines` 折叠行数；
+  - Waiting for API response、上下文占用/压缩提示、remoting 连接/重连、FleetView 任务状态、`/rewind` 回滚提示、remote-control 恢复提示等约 19 类残留文案。
+- thinking 状态词 patch 改为按**结构**匹配（函数名与阈值常量用通配符），兼容上游 minify 改名（2.1.237 的 `BYS` → `I8w`），spinner 不再残留 `almost done thinking` 等英文；effort 等级值保持不翻译。
+- `zh-cn-setup` 可从 `known_marketplaces.json` / marketplace checkout 定位完整源码安装入口，不再依赖当前工作目录；Windows 手动 patch 指引拆为 `Set-Location` + `.\install.ps1 -UpdateOnly` 两行，并提醒扩展名必须是 `.ps1`。
+- 新增 `translations-quality` 守门测试：禁止 `CJK + ing` 中英混拼动词条目；新增 thinking 改名场景回归测试（含真实 2.1.237 `I8w` 函数原文的端到端用例）。
+
+### 改进
+
+- Windows `session-start.ps1` 遵循 `CLAUDE_CONFIG_DIR` 配置目录；JS 临时脚本改用 UTF-8 无 BOM 写入；settings.json 缺失时自动初始化为 `{}` 再合并。
+- 跨平台 CI 稳定性：高风险文本门禁统一 CRLF/LF 后再匹配；PowerShell 执行型测试仅在 Windows 运行；README 支持窗口同步比较时统一换行、写回保留原换行风格，避免 Windows checkout 被误判 stale。
+- `bun-binary-io` extract 拒绝写入符号链接输出路径；`verify-release-state` 支持从 git remote 解析仓库、可用 `CCZH_GH_COMMAND` 覆盖 gh 命令。
+
+### 修复
+
+- `[Pasted text #N +M lines]` 粘贴附件协议字符串不再被翻译（避免附件正文丢失）；自动修复旧补丁产生的 `[Pasted text #N +M 行]` 损坏格式；用户可见的 `+N lines` 摘要单独汉化为「行」，两类字符串互不影响。
+- spinner 动词「焯水ing」→「焯水中」，与全表 `XX中` 格式一致。
+- Hook 计数文案词序修正：输出「已运行 N 个 X Hook」。
+
+### 验证
+
+- PR CI 全绿（#229）：`test`、`linux-native-compat`、`windows-native-compat`、`windows-install-smoke`（windows-2022 / windows-2025-vs2026）。
+- 用真实 `claude.exe`（2.1.237）提取的 `I8w` 函数原文端到端验证：英文残留全部消除、中文注入、函数名与阈值常量原样保留，内部判断逻辑不变。
+
 ## [2.12.2] - 2026-08-20
 
 ### 改进
