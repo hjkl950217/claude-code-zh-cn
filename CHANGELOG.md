@@ -6,18 +6,6 @@
 - **次版本号**：新增功能或显著改进（比如新增 patch、新增翻译）
 - **修订号**：Bug 修复和小调整（比如修正一条翻译）
 
-## [2.13.1] - 2026-08-21
-
-### 修复
-
-- 修复二进制中字面转义省略号（`…`）形式的 UI 文案漏译：native 二进制里省略号一律是字面转义形态，而 `cli-translations.json` 的 `en` 用真实省略号字符（`…`），逐条替换直接匹配不上，导致 `Resuming conversation…`（`/resume` 恢复会话时）、`Loading conversations…`、`Retrying…` 等 70 条 spinner/状态短语在 native 版本残留英文。现 patch-cli 为含省略号的翻译规则自动生成转义形态变体，通用覆盖所有此类条目。
-- 端到端验证：用真实 2.1.237 `claude.exe` 提取的 `Resuming conversation…`/`Loading conversations…` 原文片段跑 patch，英文残留全部消除、中文注入、`L7`/`Uc`/`yv` 等标识符原样保留，内部判断逻辑不变。
-
-### 验证
-
-- `node --test tests/*.test.js`：416 测试，341 通过、74 跳过、1 个已知 Windows 环境失败（`plugin/support-window.json` CRLF 比对，`core.autocrlf=true` 所致，CI Linux 不触发，baseline 同样失败），无回归。
-- `verify-upstream-compat.js --native-windows-x64 --baseline 2.1.237`：`status pass`、`runtimeStatus pass`、extract/repack/codeSignature/--version 全部 ok、display runtime 11/11、coverage PARTIAL 29（上游新增 help 文案未译，与同 minor 线历史同性质）；patch 数 1603 → 1720（转义变体规则命中）。
-
 ## [2.13.0] - 2026-08-20
 
 ### 新增
