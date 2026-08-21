@@ -1677,10 +1677,20 @@ tryRegexReplace(
 // 这样不会跨越源码结构误改对象键、标识符或注释。
 
 if (translationsFile && fs.existsSync(translationsFile)) {
+    const baseRules = JSON.parse(fs.readFileSync(translationsFile, "utf8")).filter(
+        (rule) => !shouldSkipTranslationRule(rule)
+    );
+    // 二进制里省略号一律是字面转义形态（… 六字符），而翻译表 en 用真实
+    // 省略号字符，直接 includes 匹配不上。为含省略号的规则补一份转义形态变体。
+    const escapedEllipsisRules = baseRules
+        .filter((rule) => rule.en.includes("…"))
+        .map((rule) => ({
+            en: rule.en.split("…").join("\\u2026"),
+            zh: rule.zh,
+        }));
     const translationRules = [
-        ...JSON.parse(fs.readFileSync(translationsFile, "utf8")).filter(
-            (rule) => !shouldSkipTranslationRule(rule)
-        ),
+        ...baseRules,
+        ...escapedEllipsisRules,
         ...specialLiteralTranslations,
         ...specialSplitLiteralTranslations,
     ];
