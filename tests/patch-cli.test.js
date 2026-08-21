@@ -1406,3 +1406,23 @@ test("model-facing prompt contract fragments survive patching verbatim", () => {
     );
   }
 });
+
+// exe 中所有省略号都是字面转义形态 …（真实字符形态不存在）。cli-translations.json
+// 里的 en 用真实省略号字符（…），直接 includes 匹配不上，导致 70 条 spinner/状态短语漏译
+// （含 /resume 时的 "Resuming conversation…"）。patch-cli.js 必须为含省略号的翻译规则
+// 自动生成转义形态变体。fixture 取自 2.1.237 exe 原文（偏移 115758120 / 120742700）。
+test("ellipsis translation rules match literal \\u2026 escape form in the binary", () => {
+  const patched = patchFixture([
+    'e(C,{display:"user"});return}c(!0),t(T,k,"slash_command_picker")}function S(){h.current=!0,e("Resume cancelled",{display:"system"})}if(bo("confirm:no",S,{context:"Confirmation",isActive:s&&!l}),s||l)return L7.jsxs(wp,{color:"suggestion",children:[L7.jsx(b,{bold:!0,color:"suggestion",children:"恢复会话"}),L7.jsx(R,{marginTop:1,children:L7.jsx(Uc,{message:l?"Resuming conversation\\u2026":"Loading conversations\\u2026"})})]});',
+    'if(M&&(H.length===0||oe.length===0))return yv.jsx(lws,{children:yv.jsx(Uc,{message:"Loading conversations\\u2026"})});if(J)return yv.jsx(sly,{sessionId:J.sessionId});if(U)return yv.jsx(lws,{children:yv.jsx(Uc,{message:"Resuming conversation\\u2026"})});',
+    'let spinner=rP.createElement(h6,{height:1},rP.createElement(V,{dimColor:!0},"Retrying\\u2026"));',
+    "",
+  ]);
+
+  assert.equal(patched.includes("Resuming conversation\\u2026"), false, patched);
+  assert.equal(patched.includes("Loading conversations\\u2026"), false, patched);
+  assert.equal(patched.includes("Retrying\\u2026"), false, patched);
+  assert.match(patched, /"恢复对话中…":"加载对话中…"/);
+  assert.match(patched, /message:"恢复对话中…"/);
+  assert.match(patched, /"重试中…"/);
+});
