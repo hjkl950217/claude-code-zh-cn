@@ -200,6 +200,19 @@ function patchBinary(binaryPath, translations, { dryRun = false } = {}) {
 function restoreBinary(binaryPath) {
   binaryPath = fs.realpathSync(binaryPath);
   const backup = binaryPath + ".zh-cn-backup";
+  const receiptPath = binaryPath + ".zh-cn-repair.json";
+  if (fs.existsSync(receiptPath)) {
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
+    const { hash } = require("./native-repair.js");
+    if (hash(backup) !== receipt.sourceHash) throw new Error("备份指纹不符，未还原文件；备份已保留");
+    if (hash(binaryPath) !== receipt.patchedHash) {
+      // CC 已被上游重新安装或升级，不能用同版本旧备份覆盖它。
+      fs.unlinkSync(backup);
+      fs.unlinkSync(receiptPath);
+      fs.rmSync(receiptPath + ".pending", { force: true });
+      return { restored: false, reason: "current-file-changed", preservedCurrent: true };
+    }
+  }
   const version = io.readExecutableVersion(binaryPath);
   if (!version || io.readExecutableVersion(backup) !== version) {
     throw new Error("备份与当前程序版本不一致或无法启动，未还原文件；备份已保留");
@@ -210,6 +223,8 @@ function restoreBinary(binaryPath) {
     fs.copyFileSync(backup, candidate);
     io.withWindowsFileRetry(() => fs.renameSync(candidate, binaryPath));
     io.withWindowsFileRetry(() => fs.unlinkSync(backup));
+    fs.rmSync(binaryPath + ".zh-cn-repair.json", { force: true });
+    fs.rmSync(binaryPath + ".zh-cn-repair.json.pending", { force: true });
     return { restored: true, version };
   } finally {
     io.withWindowsFileRetry(() => fs.rmSync(tempDir, { recursive: true, force: true }));

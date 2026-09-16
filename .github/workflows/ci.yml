@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -33,7 +34,7 @@ jobs:
         run: bash scripts/preflight.sh --base "${{ github.event.pull_request.base.sha }}" --skip-release-state
 
       - name: Run main preflight
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: bash scripts/preflight.sh --skip-payload-source --skip-release-state
 
   windows-install-smoke:
@@ -76,6 +77,10 @@ jobs:
       - name: Verify Linux native baseline
         run: node scripts/verify-upstream-compat.js --skip-latest --native-linux-x64 --fail-on-skip --json --verify-install
 
+      - name: Verify upgrade through the installed launcher
+        shell: bash
+        run: bash scripts/verify-native-upgrade.sh
+
   windows-native-compat:
     name: windows-native-compat (${{ matrix.shard }})
     runs-on: windows-2022
@@ -94,6 +99,11 @@ jobs:
 
       - name: Install native verification dependency
         run: npm install --global node-lief@1.3.2
+
+      - name: Verify upgrade through the installed launcher
+        if: matrix.shard == 0
+        shell: bash
+        run: bash scripts/verify-native-upgrade.sh
 
       - name: Verify Windows native support window
         shell: powershell
@@ -122,3 +132,7 @@ jobs:
           VERSIONS="$(node -p 'require("./scripts/upstream-compat.config.json").support.macosNativeExperimental.representatives.filter(v => Number(v.split(".")[2]) >= 242).join(",")')"
           test -n "$VERSIONS"
           node scripts/verify-upstream-compat.js --baseline "$VERSIONS" --skip-latest --native-macos-arm64 --fail-on-skip --json --verify-install
+
+      - name: Verify upgrade through the installed launcher
+        shell: bash
+        run: bash scripts/verify-native-upgrade.sh
