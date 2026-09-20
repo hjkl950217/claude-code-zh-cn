@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { patchStringPool } = require("../scripts/patch-bytecode.js");
+const { patchStringPool, POOL_HELP_TRANSLATIONS } = require("../scripts/patch-bytecode.js");
 
 function entry(text, wide = false) {
   const header = Buffer.alloc(8);
@@ -300,5 +300,25 @@ test("conversation compacted/summarized banner fragments translate within slot w
     assert.equal(patchStringPool(pool, []).patched, 1, `${en} must patch from the pool-only table`);
     const rep = Buffer.from(zh, "utf16le");
     assert.equal(pool.subarray(8, 8 + rep.length).toString("utf16le"), zh);
+  }
+});
+
+// 2.1.278 CLI 帮助文本（claude --help / --cloud / --plugin / auto-mode 等）。这些是常量池里
+// 的整段条目：其中一部分主表本就有完整译文，但译文太长放不进 bytecode 窄槽，被
+// patchStringPool 静默跳过（tooLong），界面因此长期显示英文——池内短译覆盖主表补上这一层。
+// 窄槽上限就是英文的字符数，中文按 UTF-16 计，故译文长度必须 <= floor(en.length / 2)。
+// 槽宽与命中均为本机 2.1.278 实测；本测试保证后续改动不会悄悄撑破槽宽。
+test("2.1.278 CLI help entries fit their narrow slots", () => {
+  assert.ok(POOL_HELP_TRANSLATIONS.size > 0, "help translation table must not be empty");
+  for (const [en, zh] of POOL_HELP_TRANSLATIONS) {
+    const label = en.slice(0, 40);
+    assert.ok(
+      zh.length <= Math.floor(en.length / 2),
+      `${label} zh length ${zh.length} must fit ${Math.floor(en.length / 2)} code units`
+    );
+    const pool = entry(en);
+    assert.equal(patchStringPool(pool, []).patched, 1, `${label} must patch from the pool table`);
+    const rep = Buffer.from(zh, "utf16le");
+    assert.equal(pool.subarray(8, 8 + rep.length).toString("utf16le"), zh, `${label} writes zh`);
   }
 });
