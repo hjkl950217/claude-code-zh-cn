@@ -310,6 +310,8 @@ test("conversation compacted/summarized banner fragments translate within slot w
 // 槽宽与命中均为本机 2.1.278 实测；本测试保证后续改动不会悄悄撑破槽宽。
 test("2.1.278 CLI help entries fit their narrow slots", () => {
   assert.ok(POOL_HELP_TRANSLATIONS.size > 0, "help translation table must not be empty");
+  // 主表非空才生效：verify-upstream-compat 拿空表探测 no-match 行为，内置表必须让路。
+  const carrier = [{ en: "__cczh_test_carrier__", zh: "载体" }];
   for (const [en, zh] of POOL_HELP_TRANSLATIONS) {
     const label = en.slice(0, 40);
     assert.ok(
@@ -317,8 +319,13 @@ test("2.1.278 CLI help entries fit their narrow slots", () => {
       `${label} zh length ${zh.length} must fit ${Math.floor(en.length / 2)} code units`
     );
     const pool = entry(en);
-    assert.equal(patchStringPool(pool, []).patched, 1, `${label} must patch from the pool table`);
+    assert.equal(patchStringPool(pool, carrier).patched, 1, `${label} must patch from the pool table`);
     const rep = Buffer.from(zh, "utf16le");
     assert.equal(pool.subarray(8, 8 + rep.length).toString("utf16le"), zh, `${label} writes zh`);
+    assert.equal(
+      patchStringPool(entry(en), []).patched,
+      0,
+      `${label} must stay inert when the master table is empty`
+    );
   }
 });

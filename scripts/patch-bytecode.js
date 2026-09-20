@@ -175,9 +175,14 @@ function patchStringPool(buffer, translations) {
   for (const item of BUILTIN_SPINNER_TRANSLATIONS) {
     if (!table.has(item.en) && !protectedText.has(item.en)) table.set(item.en, item.zh);
   }
-  // CLI 帮助文本同样只走池路径，不进主表。
-  for (const [en, zh] of POOL_HELP_TRANSLATIONS) {
-    if (!protectedText.has(en) && !PROTOCOL_FRAGMENTS.has(en) && !LOGIC_CONSUMED_FRAGMENTS.has(en)) table.set(en, zh);
+  // CLI 帮助文本是主表的窄槽补充，用来覆盖主表里放不进窄槽的长译。主表为空时没有要
+  // 补充的对象，此时不单独生效：否则 verify-upstream-compat 的 no-match 探测（传空表，
+  // 断言补丁必须失败且不动文件）会因这些条目命中而落空——上游那些内置词命中后 --help
+  // 不出中文，所以侥幸还能过；帮助文本一命中就让 --help 变中文，直接改写文件并返回 0。
+  if (translations.length > 0) {
+    for (const [en, zh] of POOL_HELP_TRANSLATIONS) {
+      if (!protectedText.has(en) && !PROTOCOL_FRAGMENTS.has(en) && !LOGIC_CONSUMED_FRAGMENTS.has(en)) table.set(en, zh);
+    }
   }
   // 池内专用译文直接写入池表（可覆盖主表同名值）；协议/逻辑守卫优先级最高。
   for (const [en, zh] of POOL_TRANSLATIONS) {
