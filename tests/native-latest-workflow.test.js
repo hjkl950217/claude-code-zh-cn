@@ -78,7 +78,7 @@ test("native latest candidate workflow promotes support evidence without forcing
   );
   assert.match(workflow, /actions\/upload-artifact@v\d+/);
   assert.match(workflow, /path:\s*\$\{\{\s*steps\.verify\.outputs\.json_path\s*\}\}/);
-  assert.doesNotMatch(workflow.split("  propose-update:")[0], /contents:\s*write|pull-requests:\s*write|issues:\s*write/);
+  assert.doesNotMatch(workflow, /contents:\s*write|pull-requests:\s*write|issues:\s*write/);
   assert.match(workflow, /persist-credentials:\s*false/);
   assert.match(workflow, /node-lief@1\.3\.2/);
   assert.match(workflow, /scripts\/promote-native-candidate\.js\s+--candidate/);
@@ -90,7 +90,6 @@ test("native latest candidate workflow promotes support evidence without forcing
   assert.match(workflow, /git\s+diff\s+--quiet/);
   assert.match(workflow, /changed=false/);
   assert.doesNotMatch(workflow, /Prepare plugin release metadata/);
-  assert.match(workflow, /scripts\/prepare-native-release-closeout\.js\s+--native-version/);
   assert.doesNotMatch(workflow, /gh release create|gh pr merge/);
   assert.doesNotMatch(workflow, /plugin_version/);
   assert.match(workflow, /Upload native support evidence/);
@@ -155,7 +154,7 @@ test("native latest candidate workflow uploads failed candidates without write p
 test("native candidate jobs cannot write repository or issue state", () => {
   const workflow = readWorkflow();
 
-  assert.doesNotMatch(workflow.split("  propose-update:")[0], /contents:\s*write|pull-requests:\s*write|issues:\s*write/);
+  assert.doesNotMatch(workflow, /contents:\s*write|pull-requests:\s*write|issues:\s*write/);
   assert.doesNotMatch(workflow, /secrets\.GITHUB_TOKEN|actions\/github-script|create-pull-request/);
 });
 
@@ -188,11 +187,9 @@ test("native latest candidate workflow prepares Windows promotion artifacts with
   assert.match(workflow, /windows-native-support-promotion-\$\{\{\s*steps\.version\.outputs\.version\s*\}\}/);
 });
 
-test("native support PR requires all three platforms and explicitly dispatches commit CI", () => {
-  const job = readWorkflow().split("  propose-update:")[1];
-  assert.match(job, /needs: \[verify, verify-windows, verify-linux\]/);
-  assert.match(job, /github.ref == 'refs\/heads\/main'/);
-  assert.match(job, /gh pr create/);
-  assert.match(job, /gh workflow run ci\.yml --ref/);
-  assert.doesNotMatch(job, /--force|gh pr merge|gh release create/);
+test("native latest candidate workflow never writes repository state or opens PRs", () => {
+  const workflow = readWorkflow();
+  assert.doesNotMatch(workflow, /^\s*propose-update:/m);
+  assert.doesNotMatch(workflow, /contents:\s*write|pull-requests:\s*write|issues:\s*write|actions:\s*write/);
+  assert.doesNotMatch(workflow, /\bgh pr create\b|gh workflow run|git push origin|git switch -c/);
 });
