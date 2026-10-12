@@ -52,18 +52,7 @@ function mergeSettings(settingsFile, overlayFile) {
 }
 
 function patchRevision(root) {
-  const hash = crypto.createHash("sha256");
-
-  for (const file of PATCH_REVISION_FILES) {
-    const target = path.join(root, file);
-    if (!fs.existsSync(target)) continue;
-    hash.update(file);
-    hash.update("\0");
-    hash.update(fs.readFileSync(target));
-    hash.update("\0");
-  }
-
-  return hash.digest("hex").slice(0, 16);
+  return require("./native-repair.js").revision(root);
 }
 
 function usage() {

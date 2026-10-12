@@ -4,7 +4,35 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { patchStringPool, POOL_HELP_TRANSLATIONS } = require("../scripts/patch-bytecode.js");
+const { patchStringPool, POOL_TRANSLATIONS, rewriteWin289DisplaySource, patchWin289DisplayModules } = require("../scripts/patch-bytecode.js");
+
+test("2.1.289 display source rewrites are anchored and keep identifiers", () => {
+  const input = 'tag:Ie?"dynamic workflow":void 0 const Le=D?"":" on"; action:"cycle",parens:!0,format:{keyCase:"lower"} action:"cycle",parens:!0,format:{keyCase:"lower"} const Eo=E?"to go back":"for agents"; action:"interrupt",format:{keyCase:"lower"} zn==="xhigh"?"xHigh":zn?sUt(zn):""," ","effort" zn===as?" (default)":"" action:"adjust" action:H?"set as default":"confirm" action:H?"set as default":"confirm" action:"use this session only" action:"list" action:"list" ' + 'action:"cancel" '.repeat(13) + 'fallback:"Esc",description:"cancel" '.repeat(6) + '"Select model" "[Pasted text #"';
+  const output = rewriteWin289DisplaySource(input, "chunk-bmzxbn1n.js", [
+    { en: "Select model", zh: "选择模型" },
+    { en: "[Pasted text #", zh: "[粘贴文本 #" },
+  ]);
+  assert.match(output.source, /强度：/);
+  assert.match(output.source, /action:"切换"/);
+  assert.match(output.source, /action:"仅本次会话使用"/);
+  assert.match(output.source, /"选择模型"/);
+  assert.match(output.source, /"\[Pasted text #"/);
+  assert.match(output.source, /fallback:"Esc"/);
+  assert.ok(!output.source.includes('" on"'));
+  assert.throws(() => rewriteWin289DisplaySource(input.replace('const Le=D?"":" on";', ''), "chunk-bmzxbn1n.js", []), /显示锚点不匹配/);
+});
+
+test("2.1.289 source fallback refuses unverified binaries without writing", () => {
+  const buffer = Buffer.alloc(64, 0x5a);
+  const before = Buffer.from(buffer);
+  assert.throws(() => patchWin289DisplayModules(buffer, { modulesPtr: { offset: 0, length: 0 } }, 52, [], {
+    format: "PE", version: "2.1.289", sourceHash: "0".repeat(64),
+  }), /指纹未经验证/);
+  assert.deepEqual(buffer, before);
+  assert.deepEqual(patchWin289DisplayModules(buffer, { modulesPtr: { offset: 0, length: 0 } }, 52, [], {
+    format: "ELF", version: "2.1.289", sourceHash: "0".repeat(64),
+  }), { sourceModules: 0, sourceReplacements: 0 });
+});
 
 function entry(text, wide = false) {
   const header = Buffer.alloc(8);
@@ -12,6 +40,76 @@ function entry(text, wide = false) {
   header.writeUInt32LE(0x11223344, 4);
   return Buffer.concat([header, Buffer.from(text, wide ? "utf16le" : "latin1")]);
 }
+
+test("identity translations preserve narrow entries without false capacity failures", () => {
+  const pool = entry("Enter");
+  const original = Buffer.from(pool);
+  const result = patchStringPool(pool, [{ en: "Enter", zh: "Enter" }], { mainTableOnly: true });
+  assert.equal(result.tooLong, 0);
+  assert.equal(result.patched, 0);
+  assert.equal(result.notFound, 0);
+  assert.deepEqual(pool, original);
+});
+
+test("cancellation sentinel and shared syntax name stay intact even when translations fit", () => {
+  for (const [en, zh] of [["Hook cancelled", "已取消"], ["Diff", "差异"]]) {
+    const pool = entry(en);
+    const original = Buffer.from(pool);
+    assert.equal(patchStringPool(pool, [{ en, zh }]).patched, 0);
+    assert.deepEqual(pool, original);
+  }
+});
+
+test("English switching command descriptions are Chinese without changing Hook contracts", () => {
+  for (const name of ["english", "en"]) {
+    const source = fs.readFileSync(path.join(__dirname, "../plugin/commands", `${name}.md`), "utf8");
+    assert.match(source, /description: 切换 Claude Code 为英文/);
+    assert.ok(source.includes(`name: ${name}\n`) || source.includes(`name: ${name}\r\n`));
+    assert.match(source, /This command is handled by the claude-code-zh-cn UserPromptSubmit hook/);
+  }
+});
+
+test("2.1.289 screenshot residual UI text fits its real pool slots", () => {
+  const terms = [
+    ["Review the current diff, or a PR", true],
+    ["); with no level given", false],
+    ["Toggle the diff panel", false],
+    ["Toggle fast mode (", false],
+    ["Reference for the Claude API", true],
+    ["TRIGGER — read BEFORE", true],
+    ["SKIP only when another provider", true],
+    ["Use this skill whenever you are about to create ANY", true],
+    ["Deep research harness", true],
+    ["Ctrl+Y to paste deleted text", false],
+    ["Grant or revoke Claude agent access", false],
+    ["Push a React design system to claude.ai/design.", false],
+    ["Health-check the user's Claude Code setup", true],
+    ["Scan your transcripts for common read-only", false],
+    ["Make a mod: a live pane, band, status line", false],
+    ["API Usage Billing", false],
+    ["Set up Claude Code's status line UI", false],
+    ["Author or improve the run-<unit> skill -", false],
+    ["Review the changed code for reuse,", true],
+    ["Use this skill to configure the Claude Code harness", false],
+    ["Verify that a code change actually", true],
+    ["Reference for writing a ", false],
+    [" tool script (script API and gotchas,", false],
+    ["for agents", false],
+    ["UserPromptSubmit operation blocked by hook:\n", false],
+    ["UserPromptExpansion operation blocked by hook:\n", false],
+    ["\n\nOriginal prompt: ", false],
+  ];
+  for (const [prefix, wide] of terms) {
+    const matches = [...POOL_TRANSLATIONS].filter(([en]) => en.startsWith(prefix));
+    assert.equal(matches.length, 1, `one pool entry for ${prefix}`);
+    const [en, zh] = matches[0];
+    const budget = en.length * (wide ? 2 : 1);
+    assert.ok(Buffer.byteLength(zh, "utf16le") <= budget, `${prefix} must fit ${budget} bytes`);
+    const pool = entry(en, wide);
+    assert.equal(patchStringPool(pool, []).patched, 1, `${prefix} must be patched`);
+    assert.equal(pool.subarray(8, 8 + Buffer.byteLength(zh, "utf16le")).toString("utf16le"), zh);
+  }
+});
 
 test("bytecode translation preserves adjacent entries and uses UTF-16 code units", () => {
   const next = entry("untouched");
@@ -84,6 +182,32 @@ test("built-in verb fits within a shorter bucket (Baked 5B -> 烤了)", () => {
   const pool = entry("Baked");
   assert.equal(patchStringPool(pool, []).patched, 1);
   assert.equal(pool.subarray(8, 12).toString("utf16le"), "烤了");
+});
+
+test("2.1.289 short UI translations respect narrow Bun pool slots", () => {
+  for (const source of [
+    "Enable Claude in Chrome integration",
+    "Disable Claude in Chrome integration",
+    "Not now",
+    "See ya!",
+    "MCP servers",
+  ]) {
+    const pool = entry(source);
+    const next = entry("untouched");
+    const joined = Buffer.concat([pool, next]);
+    const result = patchStringPool(joined, []);
+    assert.equal(result.patched, 1, source);
+    assert.ok(joined.readUInt32LE(0) * 2 <= source.length, source);
+    assert.deepEqual(joined.subarray(pool.length), next, source);
+  }
+});
+
+test("2.1.289 model picker description fits its original pool slot", () => {
+  const translations = require("../cli-translations.json");
+  const source = "Switch between Claude models. Your pick becomes the default for new sessions. For other/previous model names, specify with --model.";
+  const pool = entry(source);
+  assert.equal(patchStringPool(pool, translations).patched, 1);
+  assert.ok(pool.readUInt32LE(0) * 2 <= source.length);
 });
 
 test("master table wins over built-in extras on key collision", () => {
@@ -300,32 +424,5 @@ test("conversation compacted/summarized banner fragments translate within slot w
     assert.equal(patchStringPool(pool, []).patched, 1, `${en} must patch from the pool-only table`);
     const rep = Buffer.from(zh, "utf16le");
     assert.equal(pool.subarray(8, 8 + rep.length).toString("utf16le"), zh);
-  }
-});
-
-// 2.1.278 CLI 帮助文本（claude --help / --cloud / --plugin / auto-mode 等）。这些是常量池里
-// 的整段条目：其中一部分主表本就有完整译文，但译文太长放不进 bytecode 窄槽，被
-// patchStringPool 静默跳过（tooLong），界面因此长期显示英文——池内短译覆盖主表补上这一层。
-// 窄槽上限就是英文的字符数，中文按 UTF-16 计，故译文长度必须 <= floor(en.length / 2)。
-// 槽宽与命中均为本机 2.1.278 实测；本测试保证后续改动不会悄悄撑破槽宽。
-test("2.1.278 CLI help entries fit their narrow slots", () => {
-  assert.ok(POOL_HELP_TRANSLATIONS.size > 0, "help translation table must not be empty");
-  // 主表非空才生效：verify-upstream-compat 拿空表探测 no-match 行为，内置表必须让路。
-  const carrier = [{ en: "__cczh_test_carrier__", zh: "载体" }];
-  for (const [en, zh] of POOL_HELP_TRANSLATIONS) {
-    const label = en.slice(0, 40);
-    assert.ok(
-      zh.length <= Math.floor(en.length / 2),
-      `${label} zh length ${zh.length} must fit ${Math.floor(en.length / 2)} code units`
-    );
-    const pool = entry(en);
-    assert.equal(patchStringPool(pool, carrier).patched, 1, `${label} must patch from the pool table`);
-    const rep = Buffer.from(zh, "utf16le");
-    assert.equal(pool.subarray(8, 8 + rep.length).toString("utf16le"), zh, `${label} writes zh`);
-    assert.equal(
-      patchStringPool(entry(en), []).patched,
-      0,
-      `${label} must stay inert when the master table is empty`
-    );
   }
 });
